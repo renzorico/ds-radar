@@ -132,31 +132,20 @@ def save_cv(cv: str, company: str, grade: str, interview_angle: str, eval_path: 
     return output_path
 
 
-# ── Main ──────────────────────────────────────────────────────────────────────
+# ── Public API ────────────────────────────────────────────────────────────────
 
-def main() -> None:
-    if len(sys.argv) != 2:
-        print("Usage: python generate_pdf.py <eval_path>")
-        sys.exit(1)
-
-    eval_path = Path(sys.argv[1])
+def generate_pdf(eval_path: "Path | str") -> str:
+    """Generate a tailored CV from an eval report. Returns relative path to the output file."""
+    eval_path = Path(eval_path)
     if not eval_path.is_absolute():
         eval_path = REPO_ROOT / eval_path
 
     if not eval_path.exists():
-        print(f"Error: eval file not found: {eval_path}")
-        sys.exit(1)
+        raise FileNotFoundError(f"Eval file not found: {eval_path}")
 
-    # Step 1
     parsed = parse_eval(eval_path)
-
-    # Step 2
     base_cv = load_base_cv()
-
-    # Step 3
     tailored_cv = inject_keywords(base_cv, parsed["keywords"])
-
-    # Step 4
     output_path = save_cv(
         tailored_cv,
         parsed["company"],
@@ -164,10 +153,29 @@ def main() -> None:
         parsed["interview_angle"],
         eval_path,
     )
+    return str(output_path.relative_to(REPO_ROOT))
 
-    # Step 5 — summary
-    rel_path = output_path.relative_to(REPO_ROOT)
+
+# ── Main ──────────────────────────────────────────────────────────────────────
+
+def main() -> None:
+    if len(sys.argv) != 2:
+        print("Usage: python generate_pdf.py <eval_path>")
+        sys.exit(1)
+
+    try:
+        rel_path = generate_pdf(sys.argv[1])
+    except FileNotFoundError as e:
+        print(f"Error: {e}")
+        sys.exit(1)
+
+    # Reconstruct parsed info for the summary print
+    eval_path = Path(sys.argv[1])
+    if not eval_path.is_absolute():
+        eval_path = REPO_ROOT / eval_path
+    parsed = parse_eval(eval_path)
     kw_count = min(len(parsed["keywords"]), 8)
+
     print()
     print(f"[PDF] Tailored CV generated for: {parsed['company']}")
     print(f"[PDF] Grade: {parsed['grade']} | Keywords injected: {kw_count}")

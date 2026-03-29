@@ -203,23 +203,22 @@ def write_report(result: dict, url: str) -> Path:
     return output_path
 
 
-# ── Main ─────────────────────────────────────────────────────────────────────
+# ── Public API ───────────────────────────────────────────────────────────────
 
-def main() -> None:
-    if len(sys.argv) != 2:
-        print("Usage: python evaluate.py <job_url>")
-        sys.exit(1)
+def evaluate_url(url: str) -> dict:
+    """Evaluate a single job URL. Returns result dict with eval_path and skipped flag.
 
-    url = sys.argv[1].strip()
+    Returns:
+        {"skipped": True, "url": url, ...existing_row}   — if already in scan-history
+        {"skipped": False, "url": url, "eval_path": Path, ...score_fields}  — if new
+    """
+    url = url.strip()
 
     # Step 1 — dedup check
     history = read_scan_history()
     existing = url_already_evaluated(url, history)
     if existing:
-        print("Already evaluated. Skipping.")
-        print(f"  Seen:   {existing.get('date_seen', '?')}")
-        print(f"  Report: {existing.get('eval_path', '?')}")
-        sys.exit(0)
+        return {"skipped": True, "url": url, **existing}
 
     # Step 2 — mock JD extraction
     jd = mock_extract_jd(url)
@@ -233,8 +232,26 @@ def main() -> None:
     # Step 5 — update scan-history.tsv
     append_scan_history(url, eval_path)
 
-    # Step 6 — print summary
+    return {"skipped": False, "url": url, "eval_path": eval_path, **result}
+
+
+# ── Main ─────────────────────────────────────────────────────────────────────
+
+def main() -> None:
+    if len(sys.argv) != 2:
+        print("Usage: python evaluate.py <job_url>")
+        sys.exit(1)
+
+    result = evaluate_url(sys.argv[1])
+
+    if result["skipped"]:
+        print("Already evaluated. Skipping.")
+        print(f"  Seen:   {result.get('date_seen', '?')}")
+        print(f"  Report: {result.get('eval_path', '?')}")
+        sys.exit(0)
+
     recommended_str = "YES ✓" if result["recommended"] else "NO ✗"
+    eval_path = result["eval_path"]
     print()
     print("[DS-RADAR] MOCK MODE — no API call made")
     print(f"Company:     {result['company']}")
