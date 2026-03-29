@@ -1,0 +1,16 @@
+companies:
+  - name: DeepMind
+    url: https://boards.greenhouse.io/deepmind
+    notes: "AI research"
+  - name: Monzo
+    url: https://boards.greenhouse.io/monzo
+    notes: "Fintech DS"
+  - name: Revolut
+    url: https://jobs.lever.co/revolut
+    notes: "Growth analytics"
+  - name: Deliveroo
+    url: https://boards.greenhouse.io/deliveroo
+    notes: "Marketplace DS"
+  - name: Spotify
+    url: https://boards.greenhouse.io/spotify
+    notes: "Music ML"

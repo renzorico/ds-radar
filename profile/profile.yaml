@@ -1,0 +1,36 @@
+# DS-Radar Profile
+# I will fill this in — leave all values as TODO
+
+identity:
+  name: TODO
+  location: TODO
+  languages: TODO
+
+target_roles:
+  archetypes:
+    - TODO  # e.g. "Data Scientist at growth startup"
+    - TODO
+    - TODO
+
+compensation:
+  min_salary_gbp: TODO
+  currency: GBP
+
+skills:
+  must_match: []   # skills that must appear in JD to score high
+  nice_to_have: [] # bonus skills
+
+scoring:
+  min_grade_to_apply: B  # A/B/C/D/F
+  gate_dimensions:        # fail these = automatic D or below
+    - role_match
+    - skills_alignment
+
+locations:
+  preferred: [London, Remote, Hybrid]
+  excluded: []
+
+ats_targets:
+  - greenhouse
+  - workable
+  - ashby
