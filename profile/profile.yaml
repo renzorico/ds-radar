@@ -1,28 +1,42 @@
-# DS-Radar Profile
-# I will fill this in — leave all values as TODO
+# DS-Radar Profile — Renzo Rico
 
 identity:
-  name: TODO
-  location: TODO
-  languages: TODO
+  name: Renzo Rico
+  location: London, UK
+  languages: [English, Spanish]
 
 target_roles:
   archetypes:
-    - TODO  # e.g. "Data Scientist at growth startup"
-    - TODO
-    - TODO
+    - "Data Scientist at tech/AI startup (Series A–C)"
+    - "Analytics Engineer at scale-up"
+    - "ML Engineer with product focus"
+    - "Data Science Educator / Lead"
+    - "AI/LLM Product Developer"
+    - "Head of Data at SMB"
 
 compensation:
-  min_salary_gbp: TODO
+  min_salary_gbp: 40000
+  target_salary_gbp: 60000
   currency: GBP
 
 skills:
-  must_match: []   # skills that must appear in JD to score high
-  nice_to_have: [] # bonus skills
+  must_match:
+    - python
+    - sql
+    - machine learning
+  nice_to_have:
+    - llm
+    - langchain
+    - agentic ai
+    - dbt
+    - spark
+    - tableau
+    - tensorflow
+    - streamlit
 
 scoring:
-  min_grade_to_apply: B  # A/B/C/D/F
-  gate_dimensions:        # fail these = automatic D or below
+  min_grade_to_apply: B
+  gate_dimensions:
     - role_match
     - skills_alignment
 
@@ -34,3 +48,4 @@ ats_targets:
   - greenhouse
   - workable
   - ashby
+  - lever
