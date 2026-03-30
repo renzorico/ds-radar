@@ -1,58 +1,77 @@
-# Renzo Rico — Data Scientist & AI Developer
+# Renzo Rico — Data Scientist & Analyst
+
+**Location:** London, UK (open to hybrid/remote)
+**Languages:** English (fluent), Spanish (native)
+
+---
 
 ## Summary
-Data Scientist, educator and AI developer with 5+ years experience building
-end-to-end ML systems, teaching data science, and developing agentic AI
-applications. Skilled in Python, SQL, machine learning and modern LLM tooling.
-Based in London. Open to hybrid and remote roles. Passionate about turning
-data into decisions and building tools that actually get used.
 
-## Skills
-**Core:** Python, SQL, pandas, NumPy, scikit-learn, TensorFlow/Keras,
-matplotlib, Plotly, Streamlit
+Data Scientist and educator with hands-on experience in Python, 
+machine learning, and analytics. Currently teaching at Le Wagon 
+while building data-driven side projects. Comfortable across the 
+full DS stack from EDA to model deployment. Exploring agentic AI 
+workflows as part of personal projects.
 
-**Modern AI/LLM:** LangChain, Claude API (Anthropic), OpenAI API,
-prompt engineering, agentic AI workflows, multi-agent systems,
-RAG (retrieval-augmented generation), vector databases
-
-**Data Engineering:** dbt, Spark, BigQuery, GCP, GitHub Copilot,
-Jupyter, VS Code, Git
-
-**Visualisation & BI:** Tableau, Plotly, Streamlit dashboards
-
-**Teaching:** curriculum design, live coding instruction, Le Wagon
-bootcamp methodology, NLP, deep learning, statistics
+---
 
 ## Experience
 
 ### Data Science Instructor — Le Wagon (2022–present)
-- Teach Python, statistics, ML, deep learning and NLP to cohorts of 20–30 students
-- Built and updated curriculum modules for neural networks, transformers and LLMs
-- Mentored 200+ students through capstone projects from ideation to deployment
+- Teach Python, statistics, ML, and deep learning to bootcamp cohorts
+- Deliver modules on pandas, scikit-learn, TensorFlow, and SQL
+- Mentor students through end-to-end ML projects
+- Curriculum covers supervised learning, NLP basics, and model evaluation
 
-### AI Developer — Freelance / Side Projects (2023–present)
-- Built ds-radar: an agentic job search pipeline using Claude Code, Playwright
-  and Python to scan, evaluate and apply to DS roles autonomously
-- Built MANAGYM: a BJJ gym management SaaS with analytics and scheduling,
-  using Lovable (no-code) + Supabase + Streamlit
-- Built Streamlit-based data tools including a LinkedIn profile analyser
-  and a BJJ training timer
-- Developed multi-agent workflows combining Perplexity, Claude and custom
-  Python scripts for research and automation
+### Freelance Data Scientist / Developer (2023–present)
+- Built MANAGYM: gym management web app with scheduling and 
+  analytics features (Lovable, Supabase)
+- Built ds-radar: personal job search automation pipeline using 
+  Python and Claude API (agentic workflow, personal project)
+- LinkedIn profile analyser: NLP tool using Streamlit and 
+  HuggingFace models
+- Delivered ad-hoc analytics and dashboard work for small clients
 
-### Data Scientist — Freelance (2020–2022)
-- Delivered end-to-end ML pipelines for e-commerce and retail clients
-- Built A/B testing frameworks, customer segmentation models and
-  Tableau dashboards
-- Worked with Python, SQL, GCP and BigQuery on production datasets
-
-## Education
-Le Wagon Data Science Bootcamp (intensive, 9 weeks)
-BSc — Universidad Autónoma de Madrid
+---
 
 ## Projects
-- **ds-radar** — Agentic job search pipeline (Claude Code + Python + Playwright)
-- **MANAGYM** — BJJ gym management SaaS (Lovable + Supabase + Streamlit)
-- **LinkedIn Analyser** — Streamlit tool for profile and network analysis
-- **UN Speeches NLP** — NLP analysis of UN speech corpus (topic modelling,
-  sentiment, embeddings)
+
+**ds-radar** — AI-powered job pipeline: scans ATS portals, 
+evaluates fit against profile, generates tailored CVs. 
+Built with Python, Playwright, Claude API. (2026)
+
+**MANAGYM** — BJJ gym management SaaS. Member scheduling, 
+attendance tracking, analytics dashboard. 
+Built with Lovable + Supabase. (2025–present)
+
+**LinkedIn Analyser** — Streamlit app that analyses LinkedIn 
+profiles using NLP, identifies skill gaps vs job descriptions. 
+Built with Python, HuggingFace, Streamlit. (2024)
+
+---
+
+## Skills
+
+**Languages:** Python, SQL, JavaScript (basic)
+**ML/DS:** scikit-learn, pandas, NumPy, TensorFlow/Keras, 
+          HuggingFace, matplotlib, Plotly
+**Tools:** Streamlit, dbt, Tableau, Git, GCP (basics), 
+          Supabase, Playwright
+**Other:** Prompt engineering, Claude/Anthropic API, 
+          RAG concepts (learning), agentic workflows (learning)
+
+---
+
+## Education
+
+**Le Wagon Data Science Bootcamp** — intensive program, 
+Python/ML/DL stack (2022)
+
+**BSc + background in technical education** — Universidad 
+Autónoma de Madrid
+
+---
+
+## Languages
+- Spanish: native
+- English: fluent
