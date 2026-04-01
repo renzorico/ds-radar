@@ -1,9 +1,9 @@
-# TODO: replace mock_outreach() with real Claude API call using real eval content
 """
-ds-radar LinkedIn outreach generator — MOCK MODE
+ds-radar LinkedIn outreach generator — REAL MODE
 Usage: python contacto.py <job_url> [--name "Hiring Manager Name"]
 
 Reads or generates an eval for the URL, then produces 3 LinkedIn message variants.
+Uses existing eval if available, otherwise calls evaluate_url() for real scoring.
 Saves to applications/outreach_{company}_{date}.md
 """
 
@@ -15,41 +15,51 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from evaluate import (
-    extract_company_from_url, mock_extract_jd, mock_score,
+    extract_company_from_url,
     read_scan_history, url_already_evaluated,
-    write_report, append_scan_history, PROFILE_PATH, EVALS_DIR,
+    parse_eval_file, evaluate_url,
+    EVALS_DIR,
 )
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 APPLICATIONS_DIR = REPO_ROOT / "applications"
 
 
-# ── Find existing eval ────────────────────────────────────────────────────────
+# ── Find or run eval ──────────────────────────────────────────────────────────
 
-def find_existing_eval(url: str) -> Path | None:
-    """Return eval path from scan-history if it exists on disk."""
+def get_eval_context(url: str) -> tuple[str, str, str]:
+    """Return (company, title, grade) from existing eval or fresh evaluate_url()."""
     history = read_scan_history()
     row = url_already_evaluated(url, history)
-    if not row:
-        return None
-    eval_path = REPO_ROOT / row["eval_path"]
-    return eval_path if eval_path.exists() else None
+    if row:
+        eval_path = REPO_ROOT / row["eval_path"]
+        if eval_path.exists():
+            parsed = parse_eval_file(eval_path)
+            print(f"[CONTACTO] Using existing eval: {eval_path.name}")
+            return parsed["company"], parsed["title"], parsed["grade"]
+
+    print("[CONTACTO] No existing eval — running evaluate_url() ...")
+    result = evaluate_url(url)
+
+    # If evaluate_url returned skipped, try parsing from history again
+    if result.get("skipped"):
+        history2 = read_scan_history()
+        row2 = url_already_evaluated(url, history2)
+        if row2:
+            eval_path2 = REPO_ROOT / row2["eval_path"]
+            if eval_path2.exists():
+                parsed2 = parse_eval_file(eval_path2)
+                return parsed2["company"], parsed2["title"], parsed2["grade"]
+
+    company = result.get("company", extract_company_from_url(url))
+    title = result.get("title", "Data Scientist")
+    grade = result.get("grade", "?")
+    return company, title, grade
 
 
-def quick_eval(url: str) -> tuple[str, str, str]:
-    """Run a quick mock eval without printing, return (company, title, grade)."""
-    jd = mock_extract_jd(url)
-    result = mock_score(jd, str(PROFILE_PATH))
-    existing = find_existing_eval(url)
-    if not existing:
-        eval_path = write_report(result, url)
-        append_scan_history(url, eval_path)
-    return jd["company"], jd["title"], result["grade"]
+# ── Outreach generator (static — uses real grade context) ────────────────────
 
-
-# ── Mock outreach generator ───────────────────────────────────────────────────
-
-def mock_outreach(company: str, title: str, grade: str, name: str | None) -> dict:
+def build_outreach(company: str, title: str, grade: str, name: str | None) -> dict:
     greeting = f"Hi {name}" if name else "Hi"
     fit_phrase = "strong mutual fit" if grade in ("A", "B") else "interesting opportunity"
 
@@ -58,7 +68,6 @@ def mock_outreach(company: str, title: str, grade: str, name: str | None) -> dic
         f"My background in Python/ML and DS instruction could be a great fit. "
         f"Happy to connect!"
     )
-    # Trim to ≤300 chars
     if len(variant_a) > 300:
         variant_a = variant_a[:297] + "..."
 
@@ -116,7 +125,7 @@ def write_outreach_report(
 
     report = f"""\
 # OUTREACH: {company} — {title}
-**URL:** {url} | **Date:** {today} | **Grade:** {grade} | **Mode:** MOCK
+**URL:** {url} | **Date:** {today} | **Grade:** {grade} | **Mode:** REAL
 
 ---
 
@@ -149,25 +158,14 @@ def main() -> None:
     args = parser.parse_args()
 
     url = args.url.strip()
+    company, title, grade = get_eval_context(url)
 
-    # Get eval context — use existing or run quick mock
-    existing_eval = find_existing_eval(url)
-    if existing_eval:
-        company = extract_company_from_url(url)
-        jd = mock_extract_jd(url)
-        result = mock_score(jd, str(PROFILE_PATH))
-        title, grade = result["title"], result["grade"]
-        print(f"[CONTACTO] Using existing eval for {company}")
-    else:
-        company, title, grade = quick_eval(url)
-        print(f"[CONTACTO] No existing eval — ran quick mock for {company}")
-
-    messages = mock_outreach(company, title, grade, args.name)
+    messages = build_outreach(company, title, grade, args.name)
     output_path = write_outreach_report(messages, company, title, grade, url)
     rel = output_path.relative_to(REPO_ROOT)
 
     print()
-    print(f"[CONTACTO] MOCK MODE — no API call made")
+    print(f"[CONTACTO] REAL MODE — using scored eval data")
     print(f"Company:     {company}")
     print(f"Role:        {title}")
     print(f"Grade:       {grade}")

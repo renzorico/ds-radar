@@ -1,29 +1,46 @@
-# TODO: replace mock_score() with real Claude API call
 """
-ds-radar evaluator — MOCK MODE
+ds-radar evaluator — REAL MODE (Claude Haiku)
 Usage: python evaluate.py <job_url>
 
 Evaluates a job offer across 10 dimensions and writes a scored report to evals/.
-In mock mode, no API keys or network calls are required.
+Requires ANTHROPIC_API_KEY in ds-radar/.env
 """
 
 import sys
 import os
 import re
 import csv
-import random
+import json
 from datetime import date
 from pathlib import Path
 from urllib.parse import urlparse
 
-# ── Paths ────────────────────────────────────────────────────────────────────
+# ── Env / API setup ──────────────────────────────────────────────────────────
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+
+from dotenv import load_dotenv
+load_dotenv(REPO_ROOT / ".env")
+
+_api_key = os.getenv("ANTHROPIC_API_KEY")
+if not _api_key:
+    print("[ERROR] ANTHROPIC_API_KEY not found. Add it to ds-radar/.env")
+    sys.exit(1)
+
+import anthropic
+_client = anthropic.Anthropic(api_key=_api_key)
+
+# ── Paths ────────────────────────────────────────────────────────────────────
+
 EVALS_DIR = REPO_ROOT / "evals"
 SCAN_HISTORY = REPO_ROOT / "scan-history.tsv"
 PROFILE_PATH = REPO_ROOT / "profile" / "profile.yaml"
+CV_PATH = REPO_ROOT / "profile" / "cv.md"
+ERRORS_LOG = EVALS_DIR / "errors.log"
 
 SCAN_HISTORY_HEADER = ["url", "date_seen", "eval_path"]
+
+MODEL = "claude-haiku-4-5-20251001"
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -41,31 +58,26 @@ def extract_company_from_url(url: str) -> str:
     hostname = parsed.hostname or ""
     path = parsed.path
 
-    # greenhouse.io/acme/jobs/... → "Acme"
     if "greenhouse.io" in hostname:
         parts = [p for p in path.split("/") if p]
         if parts:
             return parts[0].replace("-", " ").title()
 
-    # jobs.lever.co/acme/... → "Acme"
     if "lever.co" in hostname:
         parts = [p for p in path.split("/") if p]
         if parts:
             return parts[0].replace("-", " ").title()
 
-    # acme.workable.com → "Acme"
     if "workable.com" in hostname:
         sub = hostname.split(".")[0]
         if sub not in ("www", "jobs", "apply"):
             return sub.replace("-", " ").title()
 
-    # acme.ashbyhq.com → "Acme"
     if "ashbyhq.com" in hostname:
         sub = hostname.split(".")[0]
         if sub not in ("www", "jobs"):
             return sub.replace("-", " ").title()
 
-    # Fallback: use second-level domain (strip TLD)
     parts = hostname.replace("www.", "").split(".")
     return parts[0].replace("-", " ").title() if parts else "Unknown"
 
@@ -96,7 +108,7 @@ def append_scan_history(url: str, eval_path: Path) -> None:
         writer.writerow([url, today, str(rel_path)])
 
 
-# ── Mock JD extraction ───────────────────────────────────────────────────────
+# ── JD extraction (mock — no real scraping yet) ───────────────────────────────
 
 def mock_extract_jd(url: str) -> dict:
     company = extract_company_from_url(url)
@@ -114,50 +126,158 @@ def mock_extract_jd(url: str) -> dict:
     }
 
 
-# ── Mock scorer ──────────────────────────────────────────────────────────────
+# ── Token efficiency helpers ─────────────────────────────────────────────────
 
-def mock_score(jd: dict, profile_path: str) -> dict:
-    random.seed(hash(jd["company"]))  # deterministic per company
+def truncate_jd(text: str, max_tokens: int = 600) -> str:
+    max_chars = max_tokens * 4
+    if len(text) <= max_chars:
+        return text
+    cut = int(max_chars * 0.8)
+    return text[:cut] + "\n...[truncated]...\n" + text[-(max_chars - cut):]
 
-    dimensions = [
-        "role_match", "skills_alignment", "seniority", "compensation",
-        "interview_likelihood", "geography", "company_stage",
-        "product_interest", "growth_trajectory", "timeline",
-    ]
-    scores = {dim: round(random.uniform(2.0, 5.0), 1) for dim in dimensions}
-    overall = round(sum(scores.values()) / len(scores), 1)
 
-    if overall >= 4.5:
-        grade = "A"
-    elif overall >= 3.8:
-        grade = "B"
-    elif overall >= 3.0:
-        grade = "C"
-    elif overall >= 2.0:
-        grade = "D"
-    else:
-        grade = "F"
+def build_lean_cv() -> str:
+    """Extract a compact CV summary from profile/cv.md for API prompts (~120 tokens)."""
+    cv_text = CV_PATH.read_text(encoding="utf-8")
+    lines = cv_text.splitlines()
 
-    fit_word = "strong" if overall >= 3.8 else "weak"
-    return {
-        "title": jd["title"],
-        "company": jd["company"],
-        "location": jd["location"],
-        "salary_visible": jd["salary"],
-        "scores": scores,
-        "overall_score": overall,
-        "grade": grade,
-        "recommended": overall >= 3.8,
-        "summary": (
-            f"MOCK EVALUATION — {jd['company']} looks like a {fit_word} fit. "
-            f"Overall score: {overall}/5.0."
-        ),
-        "top_keywords": [
-            "python", "sql", "machine learning", "pandas",
-            "data pipeline", "stakeholder management",
-        ],
-        "interview_angle": "MOCK — Lead with your end-to-end ML project experience.",
-    }
+    # Title from first heading
+    title = "Data Scientist & Instructor"
+    for line in lines:
+        if line.startswith("# "):
+            parts = line[2:].split("—")
+            if len(parts) > 1:
+                title = parts[1].strip()
+            break
+
+    # Location
+    location = "London, UK"
+    for line in lines:
+        if "**Location:**" in line:
+            location = line.replace("**Location:**", "").strip()
+            break
+
+    # Skills (first two lines of skills section)
+    skills_lines = []
+    in_skills = False
+    for line in lines:
+        if line.strip() == "## Skills":
+            in_skills = True
+            continue
+        if in_skills:
+            if line.startswith("## "):
+                break
+            stripped = line.strip()
+            if stripped and not stripped.startswith("---"):
+                skills_lines.append(stripped)
+                if len(skills_lines) >= 2:
+                    break
+
+    # Top 2 projects
+    projects = []
+    in_projects = False
+    for line in lines:
+        if line.strip() == "## Projects":
+            in_projects = True
+            continue
+        if in_projects:
+            if line.startswith("## "):
+                break
+            if line.startswith("**") and "—" in line:
+                name_part = line.split("—")[0].replace("**", "").strip()
+                desc_part = line.split("—")[1].split(".")[0].strip() if "—" in line else ""
+                projects.append(f"{name_part}: {desc_part}")
+                if len(projects) >= 2:
+                    break
+
+    skills_text = "\n".join(skills_lines)
+    projects_text = "\n".join(f"- {p}" for p in projects)
+
+    return (
+        f"Title: {title}\n"
+        f"Location: {location}\n"
+        f"Experience: DS Instructor 2022–present; Freelance DS 2023–present\n"
+        f"{skills_text}\n"
+        f"Top projects:\n{projects_text}"
+    )
+
+
+# ── Real scorer ───────────────────────────────────────────────────────────────
+
+def real_score(jd: dict) -> dict:
+    """Call Claude Haiku to score a JD against the candidate profile."""
+    lean_cv = build_lean_cv()
+    jd_text = (
+        f"Title: {jd['title']}\n"
+        f"Company: {jd['company']}\n"
+        f"Location: {jd['location']}\n"
+        f"Salary: {jd.get('salary', 'not specified')}\n"
+        f"Description:\n{jd['description']}"
+    )
+
+    user_prompt = f"""\
+Candidate profile:
+{lean_cv}
+
+Job description:
+{truncate_jd(jd_text)}
+
+Score the candidate's fit for this job. Return ONLY valid JSON with this exact schema:
+{{
+  "title": "<job title>",
+  "company": "<company name>",
+  "location": "<location>",
+  "salary_visible": "<salary or null>",
+  "scores": {{
+    "role_match": <0.0-5.0>,
+    "skills_alignment": <0.0-5.0>,
+    "seniority": <0.0-5.0>,
+    "compensation": <0.0-5.0>,
+    "interview_likelihood": <0.0-5.0>,
+    "geography": <0.0-5.0>,
+    "company_stage": <0.0-5.0>,
+    "product_interest": <0.0-5.0>,
+    "growth_trajectory": <0.0-5.0>,
+    "timeline": <0.0-5.0>
+  }},
+  "overall_score": <average of all 10 scores rounded to 1 decimal>,
+  "grade": "<A if >=4.5, B if >=3.8, C if >=3.0, D if >=2.0, F otherwise>",
+  "recommended": <true if overall_score>=3.8, else false>,
+  "summary": "<2-3 sentence evaluation of the fit>",
+  "top_keywords": ["<5-8 JD keywords relevant to this candidate>"],
+  "interview_angle": "<one sentence: best angle for this candidate to lead with>"
+}}"""
+
+    response = _client.messages.create(
+        model=MODEL,
+        max_tokens=500,
+        system="You are a job-fit evaluator. Output valid JSON only. No explanation. No preamble.",
+        messages=[{"role": "user", "content": user_prompt}],
+    )
+
+    # Cost reporting
+    usage = response.usage
+    cost = (usage.input_tokens * 0.25 + usage.output_tokens * 1.25) / 1_000_000
+    print(f"[COST] ~${cost:.5f} | {usage.input_tokens} in / {usage.output_tokens} out")
+
+    raw = response.content[0].text.strip()
+    # Strip markdown code fences if present
+    if raw.startswith("```"):
+        raw = re.sub(r"^```(?:json)?\s*", "", raw)
+        raw = re.sub(r"\s*```$", "", raw).strip()
+
+    try:
+        result = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        EVALS_DIR.mkdir(parents=True, exist_ok=True)
+        with ERRORS_LOG.open("a", encoding="utf-8") as f:
+            f.write(f"\n--- {date.today().isoformat()} | {jd['company']} ---\n")
+            f.write(f"JSONDecodeError: {exc}\n")
+            f.write(raw + "\n")
+        print(f"[ERROR] Malformed JSON from API. Raw response saved to {ERRORS_LOG}")
+        raise
+
+    return result
 
 
 # ── Report writer ────────────────────────────────────────────────────────────
@@ -183,7 +303,7 @@ def write_report(result: dict, url: str) -> Path:
 **Grade:** {result['grade']} | **Score:** {result['overall_score']}/5.0 | **Recommended:** {recommended_str}
 **URL:** {url}
 **Date:** {today}
-**Mode:** MOCK (no API call)
+**Mode:** REAL (Claude Haiku)
 
 ## Verdict
 {result['summary']}
@@ -203,6 +323,44 @@ def write_report(result: dict, url: str) -> Path:
     return output_path
 
 
+# ── Eval file parser (shared by oferta.py and contacto.py) ───────────────────
+
+def parse_eval_file(eval_path: Path) -> dict:
+    """Parse grade/score/title/company from a written eval .md file."""
+    text = eval_path.read_text(encoding="utf-8")
+    lines = text.splitlines()
+
+    title, company, grade, overall_score = "Unknown", "Unknown", "?", 0.0
+
+    # First heading: "# {title} @ {company}"
+    for line in lines:
+        if line.startswith("# "):
+            match = re.match(r"^# (.+?) @ (.+)$", line)
+            if match:
+                title = match.group(1).strip()
+                company = match.group(2).strip()
+            break
+
+    # Second line: "**Grade:** B | **Score:** 3.9/5.0 | ..."
+    for line in lines:
+        grade_match = re.search(r"\*\*Grade:\*\*\s*([A-F])", line)
+        score_match = re.search(r"\*\*Score:\*\*\s*([\d.]+)/5", line)
+        if grade_match:
+            grade = grade_match.group(1)
+        if score_match:
+            overall_score = float(score_match.group(1))
+        if grade_match or score_match:
+            break
+
+    return {
+        "title": title,
+        "company": company,
+        "grade": grade,
+        "overall_score": overall_score,
+        "recommended": overall_score >= 3.8,
+    }
+
+
 # ── Public API ───────────────────────────────────────────────────────────────
 
 def evaluate_url(url: str) -> dict:
@@ -220,11 +378,11 @@ def evaluate_url(url: str) -> dict:
     if existing:
         return {"skipped": True, "url": url, **existing}
 
-    # Step 2 — mock JD extraction
+    # Step 2 — JD extraction (mock scraping until real scraper is added)
     jd = mock_extract_jd(url)
 
-    # Step 3 — mock scoring
-    result = mock_score(jd, str(PROFILE_PATH))
+    # Step 3 — real API scoring
+    result = real_score(jd)
 
     # Step 4 — save report
     eval_path = write_report(result, url)
@@ -253,7 +411,7 @@ def main() -> None:
     recommended_str = "YES ✓" if result["recommended"] else "NO ✗"
     eval_path = result["eval_path"]
     print()
-    print("[DS-RADAR] MOCK MODE — no API call made")
+    print("[DS-RADAR] REAL MODE — Claude Haiku API call")
     print(f"Company:     {result['company']}")
     print(f"Role:        {result['title']}")
     print(f"Grade:       {result['grade']} | Score: {result['overall_score']}/5.0")

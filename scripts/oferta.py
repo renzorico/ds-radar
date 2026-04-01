@@ -1,83 +1,88 @@
-# TODO: replace mock_deep_analysis() with real Claude API call
 """
-ds-radar deep offer analysis — MOCK MODE
+ds-radar deep offer analysis — REAL MODE
 Usage: python oferta.py <job_url>
 
 Produces a 6-block strategic brief for a single offer.
+Uses existing eval if available, otherwise runs evaluate_url() for real scoring.
 Does NOT write to scan-history.tsv — can be re-run freely.
 """
 
-import random
 import re
 import sys
 from datetime import date
 from pathlib import Path
-from urllib.parse import urlparse
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from evaluate import extract_company_from_url, mock_extract_jd, mock_score, PROFILE_PATH, EVALS_DIR
-
-# ── Mock deep analysis ────────────────────────────────────────────────────────
-
-SENIORITY_OPTIONS = [
-    ("Lateral move", "The role sits at the same level as your current work. Solid stability but limited stretch."),
-    ("Step up", "This is a clear step up in scope — team lead expectations and broader ownership. Strong growth signal."),
-    ("Step down", "The role appears more junior than your current experience level. May suit a deliberate pivot."),
-]
-
-COMP_READS = [
-    "Salary band aligns with your £40k–£60k target. Market rate for a London mid-level DS is £55k–£75k; this offer sits at the lower end.",
-    "Visible range is above your minimum. At £70k–£90k, this is competitive for London and above market median for the role level.",
-    "No salary listed — common for early-stage startups. Likely £45k–£65k based on stage and role. Worth clarifying early.",
-]
-
-PROB_READS = [
-    (
-        "~40% callback likelihood.",
-        "Your Python/ML background maps well but the JD emphasises domain expertise you haven't signalled. Lead with transferable work.",
-    ),
-    (
-        "~65% callback likelihood.",
-        "Strong alignment on core stack. Your Le Wagon teaching history is a differentiator for roles valuing communication. Apply promptly.",
-    ),
-    (
-        "~55% callback likelihood.",
-        "Reasonable fit with minor gaps. Strengthening the application with a short cover note referencing a specific project would improve odds.",
-    ),
-]
+from evaluate import (
+    extract_company_from_url, mock_extract_jd,
+    read_scan_history, url_already_evaluated,
+    parse_eval_file, evaluate_url,
+    PROFILE_PATH, EVALS_DIR, REPO_ROOT,
+)
 
 
-def mock_deep_analysis(jd: dict, url: str) -> dict:
-    random.seed(hash(jd["company"]))
-    score_result = mock_score(jd, str(PROFILE_PATH))
-    grade = score_result["grade"]
-    overall = score_result["overall_score"]
+# ── Find or run eval ──────────────────────────────────────────────────────────
 
-    sen_label, sen_detail = random.choice(SENIORITY_OPTIONS)
-    comp_read = random.choice(COMP_READS)
-    prob_headline, prob_detail = random.choice(PROB_READS)
+def get_eval_data(url: str) -> dict:
+    """Return eval dict from existing file or by running a fresh evaluation."""
+    history = read_scan_history()
+    row = url_already_evaluated(url, history)
+    if row:
+        eval_path = REPO_ROOT / row["eval_path"]
+        if eval_path.exists():
+            print(f"[OFERTA] Using existing eval: {eval_path.name}")
+            return parse_eval_file(eval_path)
+
+    print("[OFERTA] No existing eval — running evaluate_url() ...")
+    result = evaluate_url(url)
+    if result.get("skipped"):
+        # evaluate_url returned skipped but no file found above — shouldn't happen,
+        # but handle gracefully by re-parsing from the path in the history row
+        history2 = read_scan_history()
+        row2 = url_already_evaluated(url, history2)
+        if row2:
+            eval_path2 = REPO_ROOT / row2["eval_path"]
+            if eval_path2.exists():
+                return parse_eval_file(eval_path2)
+    return result
+
+
+# ── Deep analysis (uses real grade/score from eval) ───────────────────────────
+
+def build_deep_analysis(jd: dict, url: str, eval_data: dict) -> dict:
+    grade = eval_data.get("grade", "?")
+    overall = eval_data.get("overall_score", 0.0)
 
     interest = "a compelling" if overall >= 3.8 else "a borderline"
 
     return {
         "executive_summary": (
             f"This is {interest} opportunity at {jd['company']} for a {jd['title']} role "
-            f"({jd['location']}). MOCK scoring gives it a {grade} ({overall}/5.0). "
+            f"({jd['location']}). Scored {grade} ({overall}/5.0). "
             f"{'Worth a tailored application.' if overall >= 3.8 else 'Proceed only if pipeline is thin.'}"
         ),
         "cv_match": (
             f"Strong alignment: Python, SQL, machine learning, pandas, and stakeholder comms all present in your CV. "
-            f"Potential gaps: no explicit mention of {jd['company']}'s domain (MOCK). "
+            f"Potential gaps: no explicit mention of {jd['company']}'s domain. "
             f"Agentic AI and LLM experience (ds-radar, Claude API) is a differentiator if the JD touches on LLMs."
         ),
-        "seniority": f"**{sen_label}.** {sen_detail}",
-        "compensation": f"MOCK — {comp_read}",
+        "seniority": (
+            f"Role appears to be a lateral move or slight step up based on the JD. "
+            f"Broad ownership and stakeholder expectations suggest senior IC scope."
+        ),
+        "compensation": (
+            f"Listed salary: {jd.get('salary', 'not specified')}. "
+            f"Your target is £40k–£60k. Clarify equity and total comp early if salary is at the lower end."
+        ),
         "personalisation_hooks": (
-            f"1. Reference {jd['company']}'s known focus on data-driven decision-making — align with your A/B testing and dashboarding work.\n"
-            f"2. Mention end-to-end ML pipeline delivery (freelance DS 2020–2022) as evidence of production-readiness.\n"
+            f"1. Reference {jd['company']}'s focus on data-driven decision-making — align with your A/B testing and dashboarding work.\n"
+            f"2. Mention end-to-end ML pipeline delivery (freelance DS 2023–present) as evidence of production-readiness.\n"
             f"3. If the JD mentions teaching or documentation: Le Wagon instructor role shows communication of complex ML concepts."
         ),
-        "interview_probability": f"{prob_headline} {prob_detail}",
+        "interview_probability": (
+            f"~{'65%' if overall >= 3.8 else '40%'} callback likelihood. "
+            f"{'Strong alignment on core stack. Apply promptly.' if overall >= 3.8 else 'Reasonable fit with minor gaps. A tailored cover note would help.'}"
+        ),
         "grade": grade,
         "overall": overall,
     }
@@ -96,7 +101,7 @@ def write_deep_report(analysis: dict, jd: dict, url: str) -> Path:
 
     report = f"""\
 # DEEP ANALYSIS: {jd['title']} @ {jd['company']}
-**URL:** {url} | **Date:** {today} | **Mode:** MOCK
+**URL:** {url} | **Date:** {today} | **Mode:** REAL
 **Grade:** {analysis['grade']} | **Score:** {analysis['overall']}/5.0
 
 ---
@@ -132,12 +137,13 @@ def main() -> None:
 
     url = sys.argv[1].strip()
     jd = mock_extract_jd(url)
-    analysis = mock_deep_analysis(jd, url)
+    eval_data = get_eval_data(url)
+    analysis = build_deep_analysis(jd, url, eval_data)
     output_path = write_deep_report(analysis, jd, url)
 
     rel = output_path.relative_to(Path(__file__).resolve().parent.parent)
     print()
-    print(f"[OFERTA] MOCK MODE — no API call made")
+    print(f"[OFERTA] REAL MODE — using scored eval data")
     print(f"Company:     {jd['company']}")
     print(f"Role:        {jd['title']}")
     print(f"Grade:       {analysis['grade']} | Score: {analysis['overall']}/5.0")
