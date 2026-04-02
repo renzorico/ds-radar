@@ -36,7 +36,7 @@ export default function ProjectDetailClient({ project }: Props) {
           href="/"
           className="font-['Geist_Mono',monospace] text-xs tracking-[0.2em] uppercase text-[#8a8070] hover:text-[#c49a52] transition-colors duration-200 flex items-center gap-2"
         >
-          <span className="text-[#3a3020]">←</span> Renzo Rico
+          <span className="text-[#3a3020]">←</span> The Field
         </Link>
         <span className="font-['Geist_Mono',monospace] text-[10px] tracking-[0.2em] uppercase text-[#3a3020]">
           {project.index} / 04
@@ -141,7 +141,7 @@ export default function ProjectDetailClient({ project }: Props) {
             href="/"
             className="font-['Geist_Mono',monospace] text-xs tracking-[0.15em] uppercase text-[#5a5040] hover:text-[#c49a52] transition-colors duration-200"
           >
-            ← Back to all exhibits
+            ← The Field
           </Link>
         </div>
       </div>
