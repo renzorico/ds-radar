@@ -365,7 +365,7 @@ Score the candidate's fit for this job. Return ONLY valid JSON with this exact s
 
 # ── Report writer ────────────────────────────────────────────────────────────
 
-def write_report(result: dict, url: str) -> Path:
+def write_report(result: dict, url: str, jd: dict | None = None) -> Path:
     today = date.today().isoformat()
     company_slug = slugify(result["company"])
     filename = f"{company_slug}_{today}.md"
@@ -380,6 +380,14 @@ def write_report(result: dict, url: str) -> Path:
         for dim, score in result["scores"].items()
     )
     keywords_str = ", ".join(result["top_keywords"])
+
+    # Embed JD source + truncated text so generate_pdf.py can use real JD later
+    jd_section = ""
+    if jd:
+        desc = jd.get("description", "")
+        jd_source = "REAL" if "[JD_SOURCE: REAL]" in desc else "MOCK"
+        jd_text = desc.replace("[JD_SOURCE: REAL]\n", "").replace("[JD_SOURCE: MOCK]\n", "")[:1500]
+        jd_section = f"\n## Job Description\n[JD_SOURCE: {jd_source}]\n{jd_text}\n"
 
     report = f"""\
 # {result['title']} @ {result['company']}
@@ -401,7 +409,7 @@ def write_report(result: dict, url: str) -> Path:
 
 ## Interview Angle
 {result['interview_angle']}
-"""
+{jd_section}"""
     output_path.write_text(report, encoding="utf-8")
     return output_path
 
@@ -467,8 +475,8 @@ def evaluate_url(url: str) -> dict:
     # Step 3 — real API scoring
     result = real_score(jd)
 
-    # Step 4 — save report
-    eval_path = write_report(result, url)
+    # Step 4 — save report (pass jd so JD source/text is embedded)
+    eval_path = write_report(result, url, jd=jd)
 
     # Step 5 — update scan-history.tsv
     append_scan_history(url, eval_path)

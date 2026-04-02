@@ -1,14 +1,15 @@
-# TODO: replace Markdown output with real PDF rendering (Puppeteer or WeasyPrint)
-# TODO: replace inject_keywords() with real Claude API call for full CV rewrite
 """
-ds-radar pdf generator — MOCK MODE
+ds-radar CV generator
 Usage: python generate_pdf.py <eval_path>
-Example: python generate_pdf.py evals/deepmind_2026-03-30.md
+Example: python generate_pdf.py evals/deepmind_2026-04-01.md
 
-Reads an eval report, tailors the base CV with extracted keywords,
-and writes a Markdown CV to applications/. No PDF library required in mock mode.
+If the eval contains a real JD ([JD_SOURCE: REAL]), calls Claude Haiku to
+rewrite the canonical CV tailored to that job.
+If JD is mock, falls back to keyword injection.
+Writes Markdown CV to applications/cv_{company}_{YYYYMMDD}.md
 """
 
+import os
 import re
 import sys
 from datetime import date
@@ -20,31 +21,21 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 CV_PATH = REPO_ROOT / "profile" / "cv.md"
 APPLICATIONS_DIR = REPO_ROOT / "applications"
 
-PLACEHOLDER_MARKER = "[PLACEHOLDER"
+# ── API client setup (same pattern as evaluate.py) ────────────────────────────
 
-MOCK_CV = """\
-# Renzo Rico — Data Scientist
+from dotenv import load_dotenv
+load_dotenv(REPO_ROOT / ".env")
 
-## Summary
-Data Scientist and educator with 5+ years experience in ML, Python, and analytics.
-Based in London. Open to hybrid and remote roles.
+_api_key = os.getenv("ANTHROPIC_API_KEY")
+if not _api_key:
+    print("[ERROR] ANTHROPIC_API_KEY not found. Add it to ds-radar/.env")
+    sys.exit(1)
 
-## Skills
-Python, SQL, pandas, scikit-learn, TensorFlow, Tableau, dbt, Spark, Git
+import anthropic
+_client = anthropic.Anthropic(api_key=_api_key)
 
-## Experience
-### Senior Data Science Instructor — Le Wagon (2022–present)
-- Taught ML, statistics, and Python to 200+ students
-- Built curriculum for deep learning and NLP modules
-
-### Data Scientist — Freelance (2020–2022)
-- Built end-to-end ML pipelines for e-commerce clients
-- Delivered A/B testing frameworks and dashboards
-
-## Education
-BSc Computer Science | Universidad Autónoma de Madrid
-"""
-
+MODEL = "claude-haiku-4-5-20251001"
+CV_REWRITE_MAX_TOKENS = 1500
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -60,7 +51,6 @@ def slugify(text: str) -> str:
 def parse_eval(eval_path: Path) -> dict:
     text = eval_path.read_text(encoding="utf-8")
 
-    # # Senior Data Scientist @ DeepMind
     title_match = re.search(r"^#\s+(.+?)\s+@\s+(.+)$", text, re.MULTILINE)
     if not title_match:
         print(f"Error: cannot parse title line from {eval_path.name}")
@@ -68,45 +58,107 @@ def parse_eval(eval_path: Path) -> dict:
     role = title_match.group(1).strip()
     company = title_match.group(2).strip()
 
-    # **Grade:** B | **Score:** 3.8/5.0
     grade_match = re.search(r"\*\*Grade:\*\*\s*([A-F])", text)
     score_match = re.search(r"\*\*Score:\*\*\s*([\d.]+)/5\.0", text)
     grade = grade_match.group(1) if grade_match else "?"
     score = score_match.group(1) if score_match else "?"
 
-    # ## Top Keywords\npython, sql, ...
+    # Dimension scores table: "| Role Match | 4.2 |"
+    dim_scores: dict[str, float] = {}
+    for m in re.finditer(r"\|\s*([^|]+?)\s*\|\s*([\d.]+)\s*\|", text):
+        key = m.group(1).strip().lower().replace(" ", "_")
+        try:
+            dim_scores[key] = float(m.group(2))
+        except ValueError:
+            pass
+
     kw_match = re.search(r"##\s+Top Keywords\s*\n([^\n#]+)", text)
     keywords: list[str] = []
     if kw_match:
-        raw = kw_match.group(1).strip()
-        keywords = [k.strip() for k in raw.split(",") if k.strip()]
+        keywords = [k.strip() for k in kw_match.group(1).split(",") if k.strip()]
 
-    # ## Interview Angle\n...
     angle_match = re.search(r"##\s+Interview Angle\s*\n([^\n#]+)", text)
     interview_angle = angle_match.group(1).strip() if angle_match else ""
+
+    # JD block: "## Job Description\n[JD_SOURCE: REAL]\n<text>"
+    jd_source = "MOCK"
+    jd_text = ""
+    jd_match = re.search(r"##\s+Job Description\s*\n(\[JD_SOURCE: (REAL|MOCK)\])\n([\s\S]+?)(?=\n##|\Z)", text)
+    if jd_match:
+        jd_source = jd_match.group(2)
+        jd_text = jd_match.group(3).strip()
 
     return {
         "role": role,
         "company": company,
         "grade": grade,
         "score": score,
+        "dim_scores": dim_scores,
         "keywords": keywords,
         "interview_angle": interview_angle,
+        "jd_source": jd_source,
+        "jd_text": jd_text,
     }
 
 
 # ── Step 2: Load base CV ──────────────────────────────────────────────────────
 
 def load_base_cv() -> str:
-    if CV_PATH.exists():
-        content = CV_PATH.read_text(encoding="utf-8")
-        if PLACEHOLDER_MARKER not in content:
-            return content
-    # cv.md is still a placeholder — use mock
-    return MOCK_CV
+    return CV_PATH.read_text(encoding="utf-8")
 
 
-# ── Step 3: Keyword injection ─────────────────────────────────────────────────
+# ── Step 3a: Claude CV rewrite (REAL JD path) ────────────────────────────────
+
+_CV_REWRITE_PROMPT = """\
+Rewrite the CV below tailored to the job description provided.
+
+Rules:
+- Keep all facts true — do not invent experience.
+- Reorder bullets so the most relevant experience for this JD comes first.
+- Rewrite the Summary section (max 3 sentences) to emphasise fit for THIS specific role.
+- Keep the same sections as the original CV unless there is a strong reason to drop one.
+- Inject important JD keywords naturally — no keyword stuffing.
+- Output a complete CV in GitHub-flavoured Markdown only. No preamble, no explanation.
+
+Candidate fit grade: {grade}
+Dimension scores: {scores_str}
+
+---
+JOB DESCRIPTION:
+{jd_text}
+
+---
+CANONICAL CV:
+{cv_text}"""
+
+
+def rewrite_cv_with_claude(parsed: dict, base_cv: str) -> str:
+    scores_str = " | ".join(
+        f"{k.replace('_', ' ').title()}: {v}"
+        for k, v in parsed["dim_scores"].items()
+    )
+    prompt = _CV_REWRITE_PROMPT.format(
+        grade=parsed["grade"],
+        scores_str=scores_str or "N/A",
+        jd_text=parsed["jd_text"],
+        cv_text=base_cv,
+    )
+
+    response = _client.messages.create(
+        model=MODEL,
+        max_tokens=CV_REWRITE_MAX_TOKENS,
+        system="You are a professional CV writer. Output clean Markdown only.",
+        messages=[{"role": "user", "content": prompt}],
+    )
+
+    usage = response.usage
+    cost = (usage.input_tokens * 0.25 + usage.output_tokens * 1.25) / 1_000_000
+    print(f"[COST] cv_rewrite ~${cost:.5f} | {usage.input_tokens} in / {usage.output_tokens} out")
+
+    return response.content[0].text.strip()
+
+
+# ── Step 3b: Keyword injection fallback (MOCK JD path) ───────────────────────
 
 def inject_keywords(cv: str, keywords: list[str]) -> str:
     kw_line = "**Key skills for this role:** " + ", ".join(keywords[:8])
@@ -115,16 +167,16 @@ def inject_keywords(cv: str, keywords: list[str]) -> str:
 
 # ── Step 4: Save tailored CV ──────────────────────────────────────────────────
 
-def save_cv(cv: str, company: str, grade: str, interview_angle: str, eval_path: Path) -> Path:
-    today = date.today().isoformat()
+def save_cv(cv: str, company: str, grade: str, jd_source: str, interview_angle: str, eval_path: Path) -> Path:
+    today = date.today().strftime("%Y%m%d")
     company_slug = slugify(company)
-    filename = f"{company_slug}_{grade}_{today}.md"
+    filename = f"cv_{company_slug}_{today}.md"
 
     APPLICATIONS_DIR.mkdir(parents=True, exist_ok=True)
     output_path = APPLICATIONS_DIR / filename
 
     header = (
-        f"<!-- Tailored for: {company} | Grade: {grade} | "
+        f"<!-- Tailored for: {company} | Grade: {grade} | JD: {jd_source} | "
         f"Source eval: {eval_path.name} | Generated: {today} -->\n"
         f"<!-- Interview angle: {interview_angle} -->\n\n"
     )
@@ -145,11 +197,23 @@ def generate_pdf(eval_path: "Path | str") -> str:
 
     parsed = parse_eval(eval_path)
     base_cv = load_base_cv()
-    tailored_cv = inject_keywords(base_cv, parsed["keywords"])
+
+    print(f"CV_REWRITE company={parsed['company']} grade={parsed['grade']} jd_source={parsed['jd_source']}")
+
+    if parsed["jd_source"] == "REAL" and parsed["jd_text"]:
+        tailored_cv = rewrite_cv_with_claude(parsed, base_cv)
+    else:
+        if parsed["jd_source"] != "REAL":
+            print("[WARN] JD_SOURCE is MOCK — Claude rewrite skipped, using keyword injection")
+        elif not parsed["jd_text"]:
+            print("[WARN] JD text missing from eval — Claude rewrite skipped, using keyword injection")
+        tailored_cv = inject_keywords(base_cv, parsed["keywords"])
+
     output_path = save_cv(
         tailored_cv,
         parsed["company"],
         parsed["grade"],
+        parsed["jd_source"],
         parsed["interview_angle"],
         eval_path,
     )
@@ -169,19 +233,7 @@ def main() -> None:
         print(f"Error: {e}")
         sys.exit(1)
 
-    # Reconstruct parsed info for the summary print
-    eval_path = Path(sys.argv[1])
-    if not eval_path.is_absolute():
-        eval_path = REPO_ROOT / eval_path
-    parsed = parse_eval(eval_path)
-    kw_count = min(len(parsed["keywords"]), 8)
-
-    print()
-    print(f"[PDF] Tailored CV generated for: {parsed['company']}")
-    print(f"[PDF] Grade: {parsed['grade']} | Keywords injected: {kw_count}")
-    print(f"[PDF] Saved to: {rel_path}")
-    print("[PDF] NOTE: Mock mode — no real PDF rendered. Real PDF via Puppeteer/WeasyPrint later.")
-    print()
+    print(f"[CV] Saved to: {rel_path}")
 
 
 if __name__ == "__main__":
