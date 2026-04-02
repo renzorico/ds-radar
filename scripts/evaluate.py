@@ -108,9 +108,92 @@ def append_scan_history(url: str, eval_path: Path) -> None:
         writer.writerow([url, today, str(rel_path)])
 
 
-# ── JD extraction (mock — no real scraping yet) ───────────────────────────────
+# ── JD extraction ────────────────────────────────────────────────────────────
+
+JD_TIMEOUT_MS = 12_000
+JD_MAX_CHARS = 3000
+
+# Ordered from most-specific to generic
+SELECTOR_CASCADE = [
+    ".job__description", "#content",            # Greenhouse
+    ".posting-content", ".content",             # Lever
+    '[data-ui="job-description"]', ".styles__JobDescription",  # Workable
+    ".ashby-job-posting-description",           # Ashby
+    "article", "main",                          # Generic
+]
+
+
+def _scrape_jd_text(page) -> str | None:
+    """Try selector cascade; return first block with >200 chars."""
+    for sel in SELECTOR_CASCADE:
+        try:
+            el = page.query_selector(sel)
+            if el:
+                text = el.inner_text().strip()
+                if len(text) > 200:
+                    return text
+        except Exception:
+            continue
+    # Last resort: join <p> paragraphs
+    try:
+        paras = [el.inner_text().strip() for el in page.query_selector_all("p")]
+        combined = "\n".join(p for p in paras if len(p) > 30)
+        return combined if len(combined) > 200 else None
+    except Exception:
+        return None
+
+
+def extract_jd(url: str) -> dict:
+    """Extract real JD via Playwright; falls back to mock template on any error."""
+    from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
+
+    company = extract_company_from_url(url)
+
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page()
+            page.goto(url, timeout=JD_TIMEOUT_MS)
+            try:
+                page.wait_for_load_state("networkidle", timeout=8_000)
+            except PWTimeout:
+                pass  # proceed with whatever loaded
+
+            title = "Data Scientist"
+            h1 = page.query_selector("h1")
+            if h1:
+                t = h1.inner_text().strip()
+                if t:
+                    title = t
+
+            jd_text = _scrape_jd_text(page)
+            browser.close()
+
+        if jd_text:
+            jd_text = jd_text[:JD_MAX_CHARS]
+            print(f"[JD] REAL — {len(jd_text)} chars | {url[:70]}")
+            return {
+                "title": title,
+                "company": company,
+                "location": "See JD",
+                "salary": "See JD",
+                "description": "[JD_SOURCE: REAL]\n" + jd_text,
+            }
+
+    except PWTimeout:
+        print(f"[JD] WARN — timeout scraping {url[:70]}, using mock")
+    except Exception as exc:
+        print(f"[JD] WARN — {exc} | {url[:70]}, using mock")
+
+    # Mock fallback
+    print(f"[JD] MOCK — template used for {url[:70]}")
+    mock = mock_extract_jd(url)
+    mock["description"] = "[JD_SOURCE: MOCK]\n" + mock["description"]
+    return mock
+
 
 def mock_extract_jd(url: str) -> dict:
+    """Template JD — used as fallback when Playwright extraction fails."""
     company = extract_company_from_url(url)
     return {
         "title": "Senior Data Scientist",
@@ -378,8 +461,8 @@ def evaluate_url(url: str) -> dict:
     if existing:
         return {"skipped": True, "url": url, **existing}
 
-    # Step 2 — JD extraction (mock scraping until real scraper is added)
-    jd = mock_extract_jd(url)
+    # Step 2 — JD extraction (real Playwright; mock fallback on failure)
+    jd = extract_jd(url)
 
     # Step 3 — real API scoring
     result = real_score(jd)
@@ -393,11 +476,37 @@ def evaluate_url(url: str) -> dict:
     return {"skipped": False, "url": url, "eval_path": eval_path, **result}
 
 
+# ── JD test helper ───────────────────────────────────────────────────────────
+
+def test_jd_extraction() -> None:
+    """Read first 3 URLs from scan-queue.txt and print extracted JD previews."""
+    queue_path = REPO_ROOT / "scan-queue.txt"
+    if not queue_path.exists() or not queue_path.read_text().strip():
+        print("scan-queue.txt is empty. Run scan.py first.")
+        return
+    urls = [u.strip() for u in queue_path.read_text().splitlines() if u.strip()][:3]
+    for url in urls:
+        print(f"\n{'─' * 60}")
+        print(f"URL: {url}")
+        jd = extract_jd(url)
+        desc = jd["description"]
+        tag = "[JD_SOURCE: REAL]" if desc.startswith("[JD_SOURCE: REAL]") else "[JD_SOURCE: MOCK]"
+        preview = desc.split("\n", 1)[1][:400] if "\n" in desc else desc[:400]
+        print(f"Tag:     {tag}")
+        print(f"Title:   {jd['title']}")
+        print(f"Preview:\n{preview}")
+
+
 # ── Main ─────────────────────────────────────────────────────────────────────
 
 def main() -> None:
+    if len(sys.argv) == 2 and sys.argv[1] == "--test-jd":
+        test_jd_extraction()
+        sys.exit(0)
+
     if len(sys.argv) != 2:
         print("Usage: python evaluate.py <job_url>")
+        print("       python evaluate.py --test-jd   (test JD extraction on scan-queue)")
         sys.exit(1)
 
     result = evaluate_url(sys.argv[1])
