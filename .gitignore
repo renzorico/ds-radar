@@ -6,6 +6,18 @@ evals/
 applications/
 scan-history.tsv
 scan-queue.txt
+artifacts-index.jsonl
+scan-queue.state.json
+urls.state.json
+urls.txt
+jobs_linkedin_scraped.csv
+visa_jobs_results.csv
+source-history.tsv
+source-history_backup.tsv
+tracker_backup.tsv
+applications_backup/
+evals_backup/
+.playwright-linkedin-profile/
 
 # Python
 __pycache__/
@@ -22,3 +34,9 @@ Thumbs.db
 # Logs
 *.log
 cv/
+
+# Frontend local/build artifacts
+web/.next/
+web/node_modules/
+web/package-lock.json
+web/next-env.d.ts
