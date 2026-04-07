@@ -15,6 +15,8 @@ from datetime import date
 from pathlib import Path
 from urllib.parse import urlparse
 
+import yaml
+
 # ── Env / API setup ──────────────────────────────────────────────────────────
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -37,10 +39,42 @@ SCAN_HISTORY = REPO_ROOT / "scan-history.tsv"
 PROFILE_PATH = REPO_ROOT / "profile" / "profile.yaml"
 CV_PATH = REPO_ROOT / "profile" / "cv.md"
 ERRORS_LOG = EVALS_DIR / "errors.log"
+CALIBRATION_PATH = EVALS_DIR / "calibration_notes.tsv"
 
 SCAN_HISTORY_HEADER = ["url", "date_seen", "eval_path"]
+SOURCE_HISTORY = REPO_ROOT / "source-history.tsv"
 
 MODEL = "claude-haiku-4-5-20251001"
+_PROFILE_CACHE: dict | None = None
+_CALIBRATION_CACHE: list[dict] | None = None
+
+# ── Sponsorship detection patterns ───────────────────────────────────────────
+
+_NEG_PATTERNS = [
+    r"no\s+(?:visa\s+)?sponsorship",
+    r"cannot\s+sponsor",
+    r"unable\s+to\s+sponsor",
+    r"must\s+have\s+(?:the\s+)?right\s+to\s+work",
+    r"must\s+possess\s+(?:the\s+)?right\s+to\s+work",
+    r"requires?\s+(?:the\s+)?right\s+to\s+work",
+    r"we\s+do\s+not\s+offer\s+visa\s+sponsorship",
+    r"without\s+sponsorship",
+    r"not\s+(?:provide|providing|offer|offering)\s+(?:visa\s+)?sponsorship",
+    r"not\s+able\s+to\s+offer\s+(?:visa\s+)?sponsorship",
+    r"do\s+not\s+sponsor",
+    r"will\s+not\s+sponsor",
+]
+
+_POS_PATTERNS = [
+    r"visa\s+sponsorship\s+(?:is\s+)?available",
+    r"offers?\s+visa\s+sponsorship",
+    r"can\s+(?:and\s+will\s+)?sponsor",
+    r"(?:provide|providing)\s+(?:visa\s+)?sponsorship",
+    r"skilled\s+worker\s+visa",
+    r"eligible\s+for\s+sponsorship",
+    r"sponsorship\s+(?:is\s+)?provided",
+    r"we\s+(?:are\s+)?(?:able\s+to\s+)?sponsor",
+]
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -106,6 +140,99 @@ def append_scan_history(url: str, eval_path: Path) -> None:
         if write_header:
             writer.writerow(SCAN_HISTORY_HEADER)
         writer.writerow([url, today, str(rel_path)])
+
+
+def load_profile() -> dict:
+    """Load the profile YAML once and return the sections used for scoring."""
+    global _PROFILE_CACHE
+    if _PROFILE_CACHE is None:
+        data = yaml.safe_load(PROFILE_PATH.read_text(encoding="utf-8")) or {}
+        _PROFILE_CACHE = {
+            "identity": data.get("identity", {}),
+            "work_authorization": data.get("work_authorization", {}),
+            "search_priorities": data.get("search_priorities", {}),
+            "roles": data.get("roles", {}),
+            "long_term_targets": data.get("long_term_targets", {}),
+            "companies": data.get("companies", {}),
+            "work_content_preferences": data.get("work_content_preferences", {}),
+            "tech_stack": data.get("tech_stack", {}),
+            "scoring": data.get("scoring", {}),
+            "sponsorship_rules": data.get("sponsorship_rules", {}),
+        }
+    return _PROFILE_CACHE
+
+
+def load_calibration_notes() -> list[dict]:
+    """Load human calibration examples once for prompt-shaping only."""
+    global _CALIBRATION_CACHE
+    if _CALIBRATION_CACHE is None:
+        if not CALIBRATION_PATH.exists():
+            _CALIBRATION_CACHE = []
+        else:
+            with CALIBRATION_PATH.open(newline="", encoding="utf-8") as handle:
+                _CALIBRATION_CACHE = list(csv.DictReader(handle, delimiter="\t"))
+    return _CALIBRATION_CACHE
+
+
+# ── Sponsorship helpers ───────────────────────────────────────────────────────
+
+def _load_linkedin_sponsorship(url: str) -> str | None:
+    """Return sponsorship_signal ('yes'/'no'/'unknown') from source-history.tsv, or None."""
+    if not SOURCE_HISTORY.exists():
+        return None
+    with SOURCE_HISTORY.open(newline="", encoding="utf-8") as f:
+        for row in csv.DictReader(f, delimiter="\t"):
+            if row.get("target_url", "").strip() == url.strip():
+                sig = row.get("sponsorship_signal", "").strip().lower()
+                return sig if sig else None
+    return None
+
+
+def detect_sponsorship_status(url: str, jd_text: str) -> dict:
+    """Deterministic sponsorship gate.
+
+    Returns {"status": "positive"|"negative"|"neutral", "reason": str, "evidence": str}.
+    Priority: JD negative > JD positive > LinkedIn signal > neutral.
+    """
+    clean = re.sub(r"^\[JD_SOURCE: (?:REAL|MOCK)\]\n", "", jd_text)
+
+    neg_hits = [
+        m.group() for p in _NEG_PATTERNS
+        for m in [re.search(p, clean, re.IGNORECASE)] if m
+    ]
+    pos_hits = [
+        m.group() for p in _POS_PATTERNS
+        for m in [re.search(p, clean, re.IGNORECASE)] if m
+    ]
+
+    if neg_hits:
+        return {
+            "status":   "negative",
+            "reason":   "explicit no-sponsorship signal in JD",
+            "evidence": "; ".join(neg_hits[:3]),
+        }
+    if pos_hits:
+        return {
+            "status":   "positive",
+            "reason":   "explicit sponsorship available in JD",
+            "evidence": "; ".join(pos_hits[:3]),
+        }
+
+    li_sig = _load_linkedin_sponsorship(url)
+    if li_sig == "no":
+        return {
+            "status":   "negative",
+            "reason":   "LinkedIn metadata: sponsorship_signal=no",
+            "evidence": "source-history.tsv",
+        }
+    if li_sig == "yes":
+        return {
+            "status":   "positive",
+            "reason":   "LinkedIn metadata: sponsorship_signal=yes",
+            "evidence": "source-history.tsv",
+        }
+
+    return {"status": "neutral", "reason": "no sponsorship signal found", "evidence": ""}
 
 
 # ── JD extraction ────────────────────────────────────────────────────────────
@@ -220,76 +347,103 @@ def truncate_jd(text: str, max_tokens: int = 600) -> str:
 
 
 def build_lean_cv() -> str:
-    """Extract a compact CV summary from profile/cv.md for API prompts (~120 tokens)."""
-    cv_text = CV_PATH.read_text(encoding="utf-8")
-    lines = cv_text.splitlines()
+    """Extract a compact profile summary from profile/profile.yaml for API prompts."""
+    profile = yaml.safe_load(PROFILE_PATH.read_text(encoding="utf-8")) or {}
+    identity = profile.get("identity", {})
+    location = identity.get("location", "London, UK")
 
-    # Title from first heading
-    title = "Data Scientist & Instructor"
-    for line in lines:
-        if line.startswith("# "):
-            parts = line[2:].split("—")
-            if len(parts) > 1:
-                title = parts[1].strip()
-            break
+    title = "Data Scientist"
+    experience_items = profile.get("experience", [])
+    projects = profile.get("projects", [])
+    tech = profile.get("tech_stack", {})
 
-    # Location
-    location = "London, UK"
-    for line in lines:
-        if "**Location:**" in line:
-            location = line.replace("**Location:**", "").strip()
-            break
-
-    # Skills (first two lines of skills section)
-    skills_lines = []
-    in_skills = False
-    for line in lines:
-        if line.strip() == "## Skills":
-            in_skills = True
-            continue
-        if in_skills:
-            if line.startswith("## "):
-                break
-            stripped = line.strip()
-            if stripped and not stripped.startswith("---"):
-                skills_lines.append(stripped)
-                if len(skills_lines) >= 2:
-                    break
-
-    # Top 2 projects
-    projects = []
-    in_projects = False
-    for line in lines:
-        if line.strip() == "## Projects":
-            in_projects = True
-            continue
-        if in_projects:
-            if line.startswith("## "):
-                break
-            if line.startswith("**") and "—" in line:
-                name_part = line.split("—")[0].replace("**", "").strip()
-                desc_part = line.split("—")[1].split(".")[0].strip() if "—" in line else ""
-                projects.append(f"{name_part}: {desc_part}")
-                if len(projects) >= 2:
-                    break
-
-    skills_text = "\n".join(skills_lines)
-    projects_text = "\n".join(f"- {p}" for p in projects)
+    experience_text = "; ".join(str(item) for item in experience_items[:2]) or "Data Scientist"
+    skills_text = (
+        f"Skills: {_compact_list(tech.get('strong_skills', []), 5)}\n"
+        f"Core stack: {_compact_list(tech.get('must_match_skills', []), 4)}"
+    )
+    projects_text = "\n".join(f"- {project}" for project in projects[:5])
 
     return (
         f"Title: {title}\n"
         f"Location: {location}\n"
-        f"Experience: DS Instructor 2022–present; Freelance DS 2023–present\n"
+        f"Experience: {experience_text}\n"
         f"{skills_text}\n"
         f"Top projects:\n{projects_text}"
     )
 
 
-# ── Real scorer ───────────────────────────────────────────────────────────────
+def _compact_list(items, limit: int = 4) -> str:
+    if not items:
+        return "n/a"
+    if not isinstance(items, list):
+        return str(items)
+    picked = [str(item) for item in items[:limit]]
+    return ", ".join(picked)
 
-def real_score(jd: dict) -> dict:
-    """Call Claude Haiku to score a JD against the candidate profile."""
-    lean_cv = build_lean_cv()
+
+def build_profile_context(profile: dict) -> str:
+    identity = profile.get("identity", {})
+    work_auth = profile.get("work_authorization", {})
+    search = profile.get("search_priorities", {})
+    roles = profile.get("roles", {})
+    long_term = profile.get("long_term_targets", {})
+    companies = profile.get("companies", {})
+    content = profile.get("work_content_preferences", {})
+    tech = profile.get("tech_stack", {})
+    scoring = profile.get("scoring", {})
+    sponsorship_rules = profile.get("sponsorship_rules", {})
+
+    priority_map = content.get("priorities", {})
+    top_content = sorted(priority_map.items(), key=lambda item: item[1])[:4]
+    top_content_text = ", ".join(f"{name}:{score}" for name, score in top_content) if top_content else "n/a"
+
+    min_seniority = roles.get("acceptable_seniority", {}).get("min", "?")
+    max_seniority = roles.get("acceptable_seniority", {}).get("max", "?")
+
+    lines = [
+        "Renzo profile:",
+        f"- identity: {identity.get('name', 'Renzo Rico')} | {identity.get('location', 'London, UK')}",
+        f"- short_term_goal: {search.get('primary_goal', 'Secure a solid data role with sponsorship')}",
+        f"- short_term_notes: {_compact_list(search.get('short_term_notes', []), 2)}",
+        f"- work_auth: needs_visa={work_auth.get('needs_visa')} | sponsorship_required={work_auth.get('sponsorship_required')}",
+        f"- target_roles: {_compact_list(roles.get('target_titles_ordered', []), 6)}",
+        f"- acceptable_seniority: {min_seniority} to {max_seniority}",
+        f"- anti_targets: {_compact_list(roles.get('anti_targets', []), 3)}",
+        f"- long_term_archetypes: {_compact_list(long_term.get('archetypes', []), 4)}",
+        f"- preferred_companies: {_compact_list(companies.get('preferred_types_ordered', []), 3)}",
+        f"- deprioritise: {_compact_list(companies.get('deprioritise', []), 2)}",
+        f"- work_content_priorities: {top_content_text}",
+        f"- work_content_notes: {_compact_list(content.get('notes', []), 2)}",
+        f"- tech_must_match: {_compact_list(tech.get('must_match_skills', []), 4)}",
+        f"- tech_nice_to_have: {_compact_list(tech.get('nice_to_have_skills', []), 5)}",
+        f"- scoring_context: min_grade_to_apply={scoring.get('min_grade_to_apply', 'B')} | gate_dimensions={_compact_list(scoring.get('gate_dimensions', []), 4)}",
+        f"- sponsorship_context_only: {_compact_list(sponsorship_rules.get('evaluation', []), 2)}",
+    ]
+    return "\n".join(lines)
+
+
+def build_calibration_hints(calibration_rows: list[dict]) -> str:
+    if not calibration_rows:
+        return "Renzo calibration hints:\n- none loaded"
+
+    lines = [
+        "Renzo calibration hints:",
+        "- Treat clearly senior roles as weaker matches even when the title sounds attractive; seniority fit matters a lot.",
+        "- Consulting roles can be acceptable short-term bridge roles when stable and technical, but usually rank below strong product data/ML roles.",
+        "- Product ML roles at credible brands or interesting product companies should lean higher when skill and seniority fit are reasonable.",
+        "- Agency or recruiter-led postings are acceptable if the underlying role looks genuinely technical and worth pursuing.",
+        "- Explicit no-sponsorship or must-already-be-authorized language is a hard fail in practice; code enforces this deterministically, so do not rescue such roles with strong scores.",
+        "- Short-term flexibility is real: stable, technical data roles with sponsorship can still be good fits even if they are not perfect long-term archetype matches.",
+        "- Consulting or reporting-heavy data roles can still be acceptable short-term bridge roles when: they use a modern data stack, are clearly data-facing (not generic operations), and offer stability and sponsorship.",
+        "- For such bridge roles, keep grades in the C / low-B range when they are stable, technical, and plausibly helpful for Renzo's long-term goals, rather than pushing them down to D by default.",
+        "- Penalise roles more heavily only when they are clearly low-leverage reporting jobs with weak tooling, little ownership, and limited learning surface, even if they are labelled as analytics or consulting.",
+        "- When sponsorship is explicitly available and the role is at least moderately technical with a medium learning surface, lean toward treating it as a viable 12–24 month bridge even if it is not an ideal long-term archetype match.",
+    ]
+    return "\n".join(lines)
+
+
+def build_score_prompt(jd: dict, lean_cv: str, profile_context: str, calibration_hints: str) -> str:
     jd_text = (
         f"Title: {jd['title']}\n"
         f"Company: {jd['company']}\n"
@@ -298,14 +452,72 @@ def real_score(jd: dict) -> dict:
         f"Description:\n{jd['description']}"
     )
 
-    user_prompt = f"""\
+    return f"""\
 Candidate profile:
 {lean_cv}
+
+{profile_context}
+
+{calibration_hints}
 
 Job description:
 {truncate_jd(jd_text)}
 
-Score the candidate's fit for this job. Return ONLY valid JSON with this exact schema:
+Score this job for Renzo Rico given the profile above. Short-term, any solid data role with visa sponsorship and real technical data work is acceptable, but roles closer to the long-term archetypes should score better. Penalise anti-targets such as pure reporting, non-technical 'data', or clearly non-technical AI titles. Seniority must fit Renzo's junior-to-mid level. Strong product ML roles at good brands should generally lean higher than consulting-heavy roles, while consulting roles may still be acceptable as bridge options if stable and technical. Sponsorship negatives are already enforced by code and should not be rescued by high scores here. Keep the scoring dimensions exactly as defined below, but interpret role_match, skills_alignment, and seniority in light of this profile and calibration.
+
+Learning surface and growth
+
+When you judge overall fit, explicitly consider the "learning surface" of the role:
+
+- Strong learning surface:
+  - Hands-on work with data or ML models (not just consuming dashboards).
+  - Ownership of analyses, models, or data products that influence real decisions.
+  - Exposure to experimentation, A/B tests, model iteration, or building/maintaining data pipelines or ML systems.
+  - Modern stack: SQL + Python/R + modern BI / analytics tools; for ML, common frameworks and cloud platforms.
+
+- Medium learning surface:
+  - Solid analytics and reporting that support decision-making, with some room for proactive analysis.
+  - Regular stakeholder interaction, explaining insights and helping shape decisions.
+  - Reasonable tools (SQL + at least one of Python/R/modern BI), but limited direct ownership of models or core data products.
+
+- Weak learning surface:
+  - Mostly ad-hoc or routine reporting, KPI refreshes, or dashboard maintenance.
+  - Little scope to propose or own analyses; work is largely reactive and task-based.
+  - Strong reliance on Excel or legacy tools, with limited access to raw data or modern tooling.
+  - Minimal exposure to experimentation, modelling, or end-to-end ownership.
+
+Use this learning-surface judgment as a soft factor when assigning the final grade:
+- Strong learning surface should push roles up slightly (for example from a marginal C toward a stronger C/B) when seniority and sponsorship are acceptable.
+- Medium learning surface is fine for "bridge" roles, especially if sponsorship and stability are present.
+- Weak learning surface should pull roles down unless there is some compensating factor (for example, excellent sponsorship plus brand plus a clear path to transition into a stronger data/ML track).
+
+Renzo long-term archetype (for context)
+
+Keep the following in mind when judging overall fit:
+
+- Long-term target: product-style data or ML roles in tech or tech-adjacent organisations (product companies, platforms, or strong internal data teams), where he can own or co-own data products, models, or critical analyses.
+- Roles that combine technical depth with teaching, communication, and stakeholder work are a plus; Renzo is comfortable explaining complex topics and working with non-technical partners.
+- Work on experimentation, agentic/AI systems, or data-driven product features is particularly attractive when seniority and sponsorship fit are reasonable.
+- Consulting or bridge roles are acceptable when they move him closer to this archetype (for example, strong technical consulting for data/ML, or analytics roles with good learning surface and sponsorship).
+
+If the job description explicitly mentions that visa sponsorship is available or supports relocation/sponsorship to the UK, treat this as a positive factor in your overall judgment:
+
+- Do not let sponsorship alone override very poor fit (for example, non-technical roles), but
+- When the role is at least moderately technical with medium learning surface and acceptable seniority, lean slightly more positive in your grading, since sponsorship increases its practical value for Renzo.
+
+Respond ONLY with a single valid JSON object.
+
+Important:
+- The JSON must be syntactically valid and parseable by a strict JSON parser.
+- Do not include any markdown, backticks, or commentary outside the JSON.
+- Do not wrap the JSON in ```json``` or any other fences.
+- Escape any double quotes inside string values.
+- Do not include newline characters in JSON keys.
+- All array values (for example in top_keywords or similar fields) must be simple JSON strings without embedded newlines or unescaped quotes.
+- Do not leave trailing commas in arrays or objects.
+- Avoid fancy formatting; plain JSON is preferred.
+
+Use this exact schema:
 {{
   "title": "<job title>",
   "company": "<company name>",
@@ -326,10 +538,85 @@ Score the candidate's fit for this job. Return ONLY valid JSON with this exact s
   "overall_score": <average of all 10 scores rounded to 1 decimal>,
   "grade": "<A if >=4.5, B if >=3.8, C if >=3.0, D if >=2.0, F otherwise>",
   "recommended": <true if overall_score>=3.8, else false>,
-  "summary": "<2-3 sentence evaluation of the fit>",
+  "summary": "<A concise plain-text explanation of your reasoning, 3–6 sentences total. Use short sentences and paragraphs only. Do NOT use markdown syntax, including lists with '-', headings, or backticks. It is fine for this string to contain newlines, but it must still be valid JSON with proper quoting and escaping. Include a clearly marked plain-text sub-section starting with 'Bridge-role assessment: ...' that answers whether this would be a reasonable 12–24 month bridge role for Renzo and explain why or why not in 1–2 sentences within the overall 3–6 sentence limit.>",
   "top_keywords": ["<5-8 JD keywords relevant to this candidate>"],
-  "interview_angle": "<one sentence: best angle for this candidate to lead with>"
+  "interview_angle": "<Optional short note on how Renzo might pitch himself in an interview for this role, or null if not sure.>"
 }}"""
+
+
+def log_prompt_preview(prompt: str, limit: int = 20) -> None:
+    lines = prompt.splitlines()[:limit]
+    print("[PROMPT] First 20 lines:")
+    for idx, line in enumerate(lines, 1):
+        print(f"[PROMPT:{idx:02d}] {line}")
+
+
+def log_instruction_block(profile_context: str, calibration_hints: str) -> None:
+    print("[INSTRUCTIONS] Profile + calibration block:")
+    for line in (profile_context + "\n" + calibration_hints).splitlines():
+        print(f"[INSTR] {line}")
+
+
+def _safe_json_loads(raw: str):
+    raw_str = raw.strip()
+    try:
+        return json.loads(raw_str)
+    except json.JSONDecodeError as original_error:
+        last_brace = raw_str.rfind("}")
+        last_bracket = raw_str.rfind("]")
+        cutoff = max(last_brace, last_bracket)
+        if cutoff == -1:
+            raise original_error
+        trimmed = raw_str[:cutoff + 1]
+        try:
+            return json.loads(trimmed)
+        except json.JSONDecodeError:
+            raise original_error
+
+
+def _repair_json_with_model(raw: str, error_message: str) -> str:
+    repair_prompt = f"""\
+You previously tried to output a JSON object but it was invalid.
+
+JSON parse error:
+{error_message}
+
+Your task now:
+- Read the original raw output between <raw> and </raw>.
+- Fix ONLY the formatting so it becomes valid JSON that a strict parser can load.
+- Do not change field names or add/remove fields.
+- If a string was cut off, you may truncate it to the last complete sentence, but do NOT invent new content.
+- Respond with a single valid JSON object only. No markdown, no code fences, no explanation.
+
+<raw>
+{raw}
+</raw>"""
+
+    response = _client.messages.create(
+        model=MODEL,
+        max_tokens=512,
+        temperature=0,
+        system="You repair malformed JSON. Output a single valid JSON object only.",
+        messages=[{"role": "user", "content": repair_prompt}],
+    )
+    repaired = response.content[0].text.strip()
+    if repaired.startswith("```"):
+        repaired = re.sub(r"^```(?:json)?\s*", "", repaired)
+        repaired = re.sub(r"\s*```$", "", repaired).strip()
+    return repaired
+
+
+# ── Real scorer ───────────────────────────────────────────────────────────────
+
+def real_score(jd: dict) -> dict:
+    """Call Claude Haiku to score a JD against the candidate profile."""
+    lean_cv = build_lean_cv()
+    profile = load_profile()
+    profile_context = build_profile_context(profile)
+    calibration_hints = build_calibration_hints(load_calibration_notes())
+    user_prompt = build_score_prompt(jd, lean_cv, profile_context, calibration_hints)
+    log_instruction_block(profile_context, calibration_hints)
+    log_prompt_preview(user_prompt)
 
     response = _client.messages.create(
         model=MODEL,
@@ -350,22 +637,32 @@ Score the candidate's fit for this job. Return ONLY valid JSON with this exact s
         raw = re.sub(r"\s*```$", "", raw).strip()
 
     try:
-        result = json.loads(raw)
+        result = _safe_json_loads(raw)
     except json.JSONDecodeError as exc:
-        EVALS_DIR.mkdir(parents=True, exist_ok=True)
-        with ERRORS_LOG.open("a", encoding="utf-8") as f:
-            f.write(f"\n--- {date.today().isoformat()} | {jd['company']} ---\n")
-            f.write(f"JSONDecodeError: {exc}\n")
-            f.write(raw + "\n")
-        print(f"[ERROR] Malformed JSON from API. Raw response saved to {ERRORS_LOG}")
-        raise
+        try:
+            repaired_raw = _repair_json_with_model(raw, str(exc))
+            result = _safe_json_loads(repaired_raw)
+        except Exception:
+            EVALS_DIR.mkdir(parents=True, exist_ok=True)
+            with ERRORS_LOG.open("a", encoding="utf-8") as f:
+                f.write(f"\n--- {date.today().isoformat()} | {jd['company']} ---\n")
+                f.write(f"JSONDecodeError: {exc}\n")
+                f.write(raw + "\n")
+            print(f"[ERROR] Malformed JSON from API. Raw response saved to {ERRORS_LOG}")
+            raise exc
+
+    result["interview_angle"] = result.get("interview_angle")
 
     return result
 
 
 # ── Report writer ────────────────────────────────────────────────────────────
 
-def write_report(result: dict, url: str, jd: dict | None = None) -> Path:
+def write_report(
+    result: dict, url: str,
+    jd: dict | None = None,
+    sponsorship: dict | None = None,
+) -> Path:
     today = date.today().isoformat()
     company_slug = slugify(result["company"])
     filename = f"{company_slug}_{today}.md"
@@ -375,11 +672,30 @@ def write_report(result: dict, url: str, jd: dict | None = None) -> Path:
 
     recommended_str = "YES ✓" if result["recommended"] else "NO ✗"
 
+    # Sponsorship flag for header + dedicated section
+    sponsor_flag = ""
+    sponsor_section = ""
+    if sponsorship:
+        icon = {"positive": "✓", "negative": "⛔", "neutral": "—"}.get(
+            sponsorship["status"], "—"
+        )
+        ev_part = (
+            f' | **Evidence:** `{sponsorship["evidence"]}`'
+            if sponsorship["evidence"] else ""
+        )
+        sponsor_section = (
+            f"\n## Sponsorship\n"
+            f"**Status:** {sponsorship['status'].upper()} {icon}"
+            f" | **Reason:** {sponsorship['reason']}{ev_part}\n"
+        )
+        if sponsorship["status"] == "negative":
+            sponsor_flag = " | ⛔ SPONSORSHIP GATE FAIL"
+
     dimension_rows = "\n".join(
         f"| {dim.replace('_', ' ').title()} | {score} |"
         for dim, score in result["scores"].items()
     )
-    keywords_str = ", ".join(result["top_keywords"])
+    keywords_str = ", ".join(result.get("top_keywords") or [])
 
     # Embed JD source + truncated text so generate_pdf.py can use real JD later
     jd_section = ""
@@ -391,11 +707,11 @@ def write_report(result: dict, url: str, jd: dict | None = None) -> Path:
 
     report = f"""\
 # {result['title']} @ {result['company']}
-**Grade:** {result['grade']} | **Score:** {result['overall_score']}/5.0 | **Recommended:** {recommended_str}
+**Grade:** {result['grade']} | **Score:** {result['overall_score']}/5.0 | **Recommended:** {recommended_str}{sponsor_flag}
 **URL:** {url}
 **Date:** {today}
 **Mode:** REAL (Claude Haiku)
-
+{sponsor_section}
 ## Verdict
 {result['summary']}
 
@@ -408,7 +724,7 @@ def write_report(result: dict, url: str, jd: dict | None = None) -> Path:
 {keywords_str}
 
 ## Interview Angle
-{result['interview_angle']}
+{result.get('interview_angle')}
 {jd_section}"""
     output_path.write_text(report, encoding="utf-8")
     return output_path
@@ -472,16 +788,31 @@ def evaluate_url(url: str) -> dict:
     # Step 2 — JD extraction (real Playwright; mock fallback on failure)
     jd = extract_jd(url)
 
+    # Step 2.5 — sponsorship gate (deterministic, pre-LLM)
+    sponsorship = detect_sponsorship_status(url, jd.get("description", ""))
+    if sponsorship["status"] == "negative":
+        print(f"[SPONSOR] GATE FAIL — {sponsorship['reason']} | {sponsorship['evidence']}")
+
     # Step 3 — real API scoring
     result = real_score(jd)
 
-    # Step 4 — save report (pass jd so JD source/text is embedded)
-    eval_path = write_report(result, url, jd=jd)
+    # Override grade/recommendation if sponsorship gate failed
+    if sponsorship["status"] == "negative":
+        result["grade"] = "F"
+        result["recommended"] = False
+        result["summary"] = (
+            f"[SPONSORSHIP GATE: FAIL] {sponsorship['reason']}. "
+            + result.get("summary", "")
+        )
+
+    # Step 4 — save report (pass jd + sponsorship so sections are embedded)
+    eval_path = write_report(result, url, jd=jd, sponsorship=sponsorship)
 
     # Step 5 — update scan-history.tsv
     append_scan_history(url, eval_path)
 
-    return {"skipped": False, "url": url, "eval_path": eval_path, **result}
+    return {"skipped": False, "url": url, "eval_path": eval_path,
+            "sponsorship": sponsorship, **result}
 
 
 # ── JD test helper ───────────────────────────────────────────────────────────

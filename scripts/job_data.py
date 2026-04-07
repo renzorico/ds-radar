@@ -1,0 +1,379 @@
+"""
+Shared tracker/enrichment helpers for list_jobs.py and dashboard.py.
+"""
+
+from __future__ import annotations
+
+import csv
+import json
+import re
+from dataclasses import asdict, dataclass
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+TRACKER = REPO_ROOT / "tracker.tsv"
+SOURCE_HISTORY = REPO_ROOT / "source-history.tsv"
+SCAN_HISTORY = REPO_ROOT / "scan-history.tsv"
+EVALS_DIR = REPO_ROOT / "evals"
+APPLICATIONS = REPO_ROOT / "applications"
+
+TRACKER_HEADER = [
+    "date",
+    "company",
+    "role",
+    "url",
+    "grade",
+    "score",
+    "status",
+    "pdf_path",
+    "notes",
+]
+
+GRADE_ORDER = {"A": 0, "B": 1, "C": 2, "D": 3, "F": 4}
+FILTER_OPTIONS = ["all", "b_plus", "sponsorship_fail", "linkedin_only", "ready"]
+
+
+@dataclass
+class JobRecord:
+    date: str
+    grade: str
+    score: str
+    source: str
+    jd_src: str
+    spons: str
+    cv: str
+    ofe: str
+    con: str
+    company: str
+    role: str
+    status: str
+    url: str
+    notes: str
+    eval_path: str
+    eval_excerpt: str
+    cv_path: str
+    oferta_path: str
+    outreach_path: str
+    ready_to_apply: bool
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+    def to_json(self) -> str:
+        return json.dumps(self.to_dict(), indent=2)
+
+
+def slugify(text: str) -> str:
+    text = text.lower().strip()
+    text = re.sub(r"[^\w\s-]", "", text)
+    text = re.sub(r"[\s_]+", "-", text)
+    return text
+
+
+def load_tsv(path: Path) -> list[dict]:
+    if not path.exists():
+        return []
+    with path.open(newline="", encoding="utf-8") as handle:
+        return list(csv.DictReader(handle, delimiter="\t"))
+
+
+def write_tsv(path: Path, rows: list[dict], fieldnames: list[str]) -> None:
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fieldnames, delimiter="\t")
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def build_index(rows: list[dict], key_col: str) -> dict[str, dict]:
+    return {row[key_col].strip(): row for row in rows if row.get(key_col)}
+
+
+def infer_source(url: str, source_index: dict[str, dict]) -> str:
+    row = source_index.get(url.strip())
+    if row:
+        return row.get("source", "ats").strip() or "ats"
+    return "linkedin" if "linkedin.com" in url else "ats"
+
+
+def grade_passes(grade: str, filt: str | None) -> bool:
+    if not filt:
+        return True
+    if filt.endswith("+"):
+        return GRADE_ORDER.get(grade, 99) <= GRADE_ORDER.get(filt[:-1], 99)
+    if filt.endswith("-"):
+        return GRADE_ORDER.get(grade, 99) >= GRADE_ORDER.get(filt[:-1], 99)
+    return grade == filt
+
+
+def find_eval(row: dict, scan_index: dict[str, dict]) -> Path | None:
+    url = row.get("url", "").strip()
+    scan_row = scan_index.get(url)
+    if scan_row:
+        candidate = REPO_ROOT / scan_row.get("eval_path", "")
+        if candidate.exists():
+            return candidate
+
+    slug = slugify(row.get("company", ""))
+    date_str = row.get("date", "")
+    if slug:
+        if date_str:
+            dated = EVALS_DIR / f"{slug}_{date_str}.md"
+            if dated.exists():
+                return dated
+        hits = sorted(
+            (path for path in EVALS_DIR.glob(f"{slug}_*.md") if not path.name.startswith("deep_")),
+            reverse=True,
+        )
+        if hits:
+            return hits[0]
+    return None
+
+
+def find_latest_artifact(company: str, pattern: str, directory: Path) -> Path | None:
+    slug = slugify(company)
+    hits = sorted(directory.glob(pattern.format(slug=slug)), reverse=True)
+    return hits[0] if hits else None
+
+
+def short_role_slug(role: str, words: int = 3) -> str:
+    parts = [part for part in slugify(role).split("-") if part]
+    return "-".join(parts[:words])
+
+
+def url_job_slug(url: str) -> str:
+    text = url.strip().rstrip("/").split("/")[-1]
+    text = re.sub(r"[^a-zA-Z0-9-]+", "-", text)
+    text = re.sub(r"-+", "-", text).strip("-").lower()
+    return text
+
+
+def _artifact_matches_row(path: Path, company_slug: str, role_slug: str, job_slug: str) -> bool:
+    stem = path.stem.lower()
+    if company_slug and company_slug not in stem:
+        return False
+    if job_slug and job_slug in stem:
+        return True
+    if role_slug and role_slug in stem:
+        return True
+    return False
+
+
+def _company_date_key(row: dict) -> tuple[str, str]:
+    return slugify(row.get("company", "")), row.get("date", "").strip()
+
+
+def resolve_cv_path(
+    row: dict,
+    company: str,
+    role: str,
+    related_rows: list[dict],
+) -> Path | None:
+    company_slug = slugify(company)
+    role_slug = short_role_slug(role)
+    job_slug = url_job_slug(row.get("url", ""))
+    tracker_path = row.get("pdf_path", "").strip()
+    if tracker_path:
+        candidate = REPO_ROOT / tracker_path
+        if candidate.exists() and _artifact_matches_row(candidate, company_slug, role_slug, job_slug):
+            return candidate
+
+    if len(related_rows) == 1:
+        for pattern in ("cv_{slug}_*.pdf", "cv_{slug}_*.md"):
+            candidate = find_latest_artifact(company, pattern, APPLICATIONS)
+            if candidate:
+                return candidate
+
+    for pattern in ("cv_{slug}_*.pdf", "cv_{slug}_*.md"):
+        for candidate in sorted(APPLICATIONS.glob(pattern.format(slug=company_slug)), reverse=True):
+            if _artifact_matches_row(candidate, company_slug, role_slug, job_slug):
+                return candidate
+    return None
+
+
+def resolve_related_artifact(
+    row: dict,
+    company: str,
+    role: str,
+    related_rows: list[dict],
+    directory: Path,
+    pattern: str,
+) -> Path | None:
+    company_slug = slugify(company)
+    role_slug = short_role_slug(role)
+    job_slug = url_job_slug(row.get("url", ""))
+    candidates = sorted(directory.glob(pattern.format(slug=company_slug)), reverse=True)
+    if len(related_rows) == 1:
+        return candidates[0] if candidates else None
+    for candidate in candidates:
+        if _artifact_matches_row(candidate, company_slug, role_slug, job_slug):
+            return candidate
+    return None
+
+
+def read_eval_meta(eval_path: Path | None, tracker_notes: str) -> tuple[str, str]:
+    jd_src = tracker_notes if tracker_notes in ("REAL", "MOCK") else "?"
+    if eval_path is None:
+        return jd_src, "?"
+
+    try:
+        text = eval_path.read_text(encoding="utf-8")
+    except OSError:
+        return jd_src, "?"
+
+    if jd_src == "?":
+        if "[JD_SOURCE: REAL]" in text:
+            jd_src = "REAL"
+        elif "[JD_SOURCE: MOCK]" in text:
+            jd_src = "MOCK"
+
+    spons = "PASS"
+    for line in text.splitlines()[:6]:
+        if "SPONSORSHIP GATE FAIL" in line:
+            spons = "FAIL"
+            break
+    else:
+        match = re.search(r"## Sponsorship\n\*\*Status:\*\* (NEGATIVE|POSITIVE|NEUTRAL)", text)
+        if match:
+            spons = "FAIL" if match.group(1) == "NEGATIVE" else "PASS"
+
+    return jd_src, spons
+
+
+def extract_markdown_section(path: Path | None, headings: list[str]) -> str:
+    if path is None or not path.exists():
+        return ""
+
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return ""
+
+    for heading in headings:
+        pattern = rf"{re.escape(heading)}\s*\n([\s\S]+?)(?=\n##|\Z)"
+        match = re.search(pattern, text)
+        if match:
+            return normalize_excerpt(match.group(1))
+
+    return normalize_excerpt(text[:500])
+
+
+def normalize_excerpt(text: str, limit: int = 360) -> str:
+    cleaned = re.sub(r"\s+", " ", text)
+    cleaned = re.sub(r"^[#*\-\d.\s]+", "", cleaned).strip()
+    if len(cleaned) <= limit:
+        return cleaned
+    return cleaned[: limit - 3].rstrip() + "..."
+
+
+def sort_records(records: list[JobRecord], sort_by: str) -> list[JobRecord]:
+    def sort_key(record: JobRecord):
+        if sort_by == "grade":
+            return GRADE_ORDER.get(record.grade, 99)
+        if sort_by == "company":
+            return record.company.lower()
+        if sort_by == "score":
+            try:
+                return -float(record.score)
+            except (TypeError, ValueError):
+                return 0.0
+        return record.date
+
+    return sorted(records, key=sort_key, reverse=(sort_by == "date"))
+
+
+def filter_records(records: list[JobRecord], filter_name: str) -> list[JobRecord]:
+    if filter_name == "b_plus":
+        return [record for record in records if grade_passes(record.grade, "B+")]
+    if filter_name == "sponsorship_fail":
+        return [record for record in records if record.spons == "FAIL"]
+    if filter_name == "linkedin_only":
+        return [record for record in records if record.source == "linkedin"]
+    if filter_name == "ready":
+        return [record for record in records if record.ready_to_apply]
+    return list(records)
+
+
+def load_job_records(sort_by: str = "date") -> list[JobRecord]:
+    tracker_rows = load_tsv(TRACKER)
+    source_index = build_index(load_tsv(SOURCE_HISTORY), "target_url")
+    scan_index = build_index(load_tsv(SCAN_HISTORY), "url")
+    rows_by_company_date: dict[tuple[str, str], list[dict]] = {}
+    for tracker_row in tracker_rows:
+        rows_by_company_date.setdefault(_company_date_key(tracker_row), []).append(tracker_row)
+
+    records: list[JobRecord] = []
+    for row in tracker_rows:
+        company = row.get("company", "?").strip()
+        role = row.get("role", "?").strip()
+        url = row.get("url", "").strip()
+        status = row.get("status", "").strip()
+        notes = row.get("notes", "").strip()
+        source = infer_source(url, source_index)
+        eval_path = find_eval(row, scan_index)
+        related_rows = rows_by_company_date.get(_company_date_key(row), [])
+
+        if status == "sponsorship_fail":
+            jd_src, spons = notes if notes in ("REAL", "MOCK") else "?", "FAIL"
+            jd_src, _ = read_eval_meta(eval_path, notes)
+        else:
+            jd_src, spons = read_eval_meta(eval_path, notes)
+
+        oferta_path = resolve_related_artifact(
+            row, company, role, related_rows, EVALS_DIR, "deep_{slug}_*.md"
+        )
+        outreach_path = resolve_related_artifact(
+            row, company, role, related_rows, APPLICATIONS, "outreach_{slug}_*.md"
+        )
+        cv_path = resolve_cv_path(row, company, role, related_rows)
+
+        excerpt = extract_markdown_section(oferta_path, ["## 1. Executive Summary"])
+        if not excerpt:
+            excerpt = extract_markdown_section(eval_path, ["## Verdict", "## 1. Executive Summary"])
+
+        has_cv = "yes" if cv_path else "no"
+        has_ofe = "yes" if oferta_path else "no"
+        has_con = "yes" if outreach_path else "no"
+        ready_to_apply = has_cv == "yes" and has_ofe == "yes" and has_con == "yes" and spons == "PASS"
+
+        records.append(
+            JobRecord(
+                date=row.get("date", "").strip(),
+                grade=row.get("grade", "?").strip(),
+                score=row.get("score", "?").strip(),
+                source=source,
+                jd_src=jd_src,
+                spons=spons,
+                cv=has_cv,
+                ofe=has_ofe,
+                con=has_con,
+                company=company,
+                role=row.get("role", "?").strip(),
+                status=status,
+                url=url,
+                notes=notes,
+                eval_path=str(eval_path.relative_to(REPO_ROOT)) if eval_path else "",
+                eval_excerpt=excerpt,
+                cv_path=str(cv_path.relative_to(REPO_ROOT)) if cv_path else "",
+                oferta_path=str(oferta_path.relative_to(REPO_ROOT)) if oferta_path else "",
+                outreach_path=str(outreach_path.relative_to(REPO_ROOT)) if outreach_path else "",
+                ready_to_apply=ready_to_apply,
+            )
+        )
+
+    return sort_records(records, sort_by)
+
+
+def update_tracker_status(url: str, status: str) -> bool:
+    rows = load_tsv(TRACKER)
+    changed = False
+    for row in rows:
+        if row.get("url", "").strip() == url.strip():
+            row["status"] = status
+            changed = True
+            break
+
+    if not changed:
+        return False
+
+    write_tsv(TRACKER, rows, TRACKER_HEADER)
+    return True

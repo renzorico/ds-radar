@@ -6,14 +6,18 @@ Example: python generate_pdf.py evals/deepmind_2026-04-01.md
 If the eval contains a real JD ([JD_SOURCE: REAL]), calls Claude Haiku to
 rewrite the canonical CV tailored to that job.
 If JD is mock, falls back to keyword injection.
-Writes Markdown CV to applications/cv_{company}_{YYYYMMDD}.md
+Always writes Markdown CV to applications/cv_{company}_{YYYYMMDD}.md and
+attempts to render applications/cv_{company}_{YYYYMMDD}.pdf via Playwright.
 """
 
+import html
 import os
 import re
 import sys
 from datetime import date
 from pathlib import Path
+
+import markdown as md
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 
@@ -44,6 +48,10 @@ def slugify(text: str) -> str:
     text = re.sub(r"[^\w\s-]", "", text)
     text = re.sub(r"[\s_]+", "-", text)
     return text
+
+
+def strip_html_comments(text: str) -> str:
+    return re.sub(r"<!--[\s\S]*?-->", "", text).strip()
 
 
 # ── Step 1: Parse eval report ─────────────────────────────────────────────────
@@ -165,15 +173,26 @@ def inject_keywords(cv: str, keywords: list[str]) -> str:
     return cv.replace("## Skills", f"## Skills\n{kw_line}\n")
 
 
-# ── Step 4: Save tailored CV ──────────────────────────────────────────────────
+# ── Step 4: Save tailored CV + render PDF ─────────────────────────────────────
 
-def save_cv(cv: str, company: str, grade: str, jd_source: str, interview_angle: str, eval_path: Path) -> Path:
+def build_output_paths(company: str) -> tuple[Path, Path]:
     today = date.today().strftime("%Y%m%d")
     company_slug = slugify(company)
-    filename = f"cv_{company_slug}_{today}.md"
-
+    stem = f"cv_{company_slug}_{today}"
     APPLICATIONS_DIR.mkdir(parents=True, exist_ok=True)
-    output_path = APPLICATIONS_DIR / filename
+    return APPLICATIONS_DIR / f"{stem}.md", APPLICATIONS_DIR / f"{stem}.pdf"
+
+
+def save_cv(
+    cv: str,
+    output_path: Path,
+    company: str,
+    grade: str,
+    jd_source: str,
+    interview_angle: str,
+    eval_path: Path,
+) -> Path:
+    today = date.today().strftime("%Y%m%d")
 
     header = (
         f"<!-- Tailored for: {company} | Grade: {grade} | JD: {jd_source} | "
@@ -184,10 +203,206 @@ def save_cv(cv: str, company: str, grade: str, jd_source: str, interview_angle: 
     return output_path
 
 
+def split_cv_header(cv_markdown: str) -> tuple[str, list[str], str]:
+    clean = strip_html_comments(cv_markdown)
+    lines = clean.splitlines()
+    name = ""
+    meta_lines: list[str] = []
+    body_start = 0
+
+    for idx, raw_line in enumerate(lines):
+        line = raw_line.strip()
+        if not line:
+            continue
+        if line.startswith("# "):
+            name = line[2:].strip()
+            body_start = idx + 1
+            break
+        body_start = idx
+        break
+
+    idx = body_start
+    while idx < len(lines):
+        line = lines[idx].strip()
+        if not line:
+            idx += 1
+            continue
+        if line in {"---", "***"}:
+            idx += 1
+            break
+        if line.startswith("## "):
+            break
+        meta_lines.append(line)
+        idx += 1
+
+    body = "\n".join(lines[idx:]).strip()
+    return name, meta_lines, body
+
+
+def render_cv_html(cv_markdown: str, company: str, role: str) -> str:
+    name, meta_lines, body_markdown = split_cv_header(cv_markdown)
+    body_html = md.markdown(
+        body_markdown,
+        extensions=["extra", "sane_lists"],
+        output_format="html5",
+    )
+    meta_html = "".join(
+        f"<p>{md.markdown(line, output_format='html5').removeprefix('<p>').removesuffix('</p>')}</p>"
+        for line in meta_lines
+    )
+    title_name = name or "Curriculum Vitae"
+    role_line = html.escape(role)
+    company_line = html.escape(company)
+
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{html.escape(title_name)} | CV</title>
+  <style>
+    @page {{
+      size: A4;
+      margin: 14mm 12mm 14mm 12mm;
+    }}
+    :root {{
+      color-scheme: light;
+      --ink: #111827;
+      --muted: #4b5563;
+      --rule: #d1d5db;
+      --accent: #0f172a;
+      --paper: #ffffff;
+    }}
+    * {{
+      box-sizing: border-box;
+    }}
+    html, body {{
+      margin: 0;
+      padding: 0;
+      background: var(--paper);
+      color: var(--ink);
+      font-family: "Helvetica Neue", Arial, sans-serif;
+      font-size: 10.5pt;
+      line-height: 1.42;
+      -webkit-font-smoothing: antialiased;
+    }}
+    body {{
+      padding: 0;
+    }}
+    main {{
+      width: 100%;
+    }}
+    header {{
+      border-bottom: 1px solid var(--rule);
+      padding-bottom: 10px;
+      margin-bottom: 14px;
+    }}
+    h1 {{
+      margin: 0 0 4px;
+      font-size: 20pt;
+      line-height: 1.1;
+      color: var(--accent);
+      letter-spacing: -0.02em;
+    }}
+    .target-role {{
+      margin: 0 0 8px;
+      font-size: 9.5pt;
+      color: var(--muted);
+    }}
+    .meta p {{
+      margin: 0 0 2px;
+      font-size: 9.25pt;
+      color: var(--muted);
+    }}
+    h2 {{
+      margin: 14px 0 6px;
+      font-size: 11pt;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--accent);
+      page-break-after: avoid;
+    }}
+    h3 {{
+      margin: 10px 0 4px;
+      font-size: 10.5pt;
+      color: var(--ink);
+      page-break-after: avoid;
+    }}
+    p {{
+      margin: 0 0 7px;
+      orphans: 3;
+      widows: 3;
+    }}
+    ul {{
+      margin: 0 0 8px 18px;
+      padding: 0;
+    }}
+    li {{
+      margin: 0 0 4px;
+      page-break-inside: avoid;
+    }}
+    hr {{
+      display: none;
+    }}
+    strong {{
+      color: var(--accent);
+    }}
+    a {{
+      color: inherit;
+      text-decoration: none;
+    }}
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>{html.escape(title_name)}</h1>
+      <p class="target-role">Tailored CV for {company_line} | {role_line}</p>
+      <div class="meta">{meta_html}</div>
+    </header>
+    {body_html}
+  </main>
+</body>
+</html>
+"""
+
+
+def render_pdf(html_content: str, output_path: Path) -> Path:
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        try:
+            page = browser.new_page()
+            page.set_content(html_content, wait_until="load")
+            page.emulate_media(media="print")
+            page.pdf(
+                path=str(output_path),
+                format="A4",
+                print_background=True,
+                prefer_css_page_size=True,
+                margin={
+                    "top": "14mm",
+                    "right": "12mm",
+                    "bottom": "14mm",
+                    "left": "12mm",
+                },
+            )
+        finally:
+            browser.close()
+
+    return output_path
+
+
 # ── Public API ────────────────────────────────────────────────────────────────
 
 def generate_pdf(eval_path: "Path | str") -> str:
-    """Generate a tailored CV from an eval report. Returns relative path to the output file."""
+    """
+    Generate a tailored CV from an eval report.
+
+    Returns the relative path to the PDF when rendering succeeds, otherwise the
+    relative path to the Markdown file.
+    """
     eval_path = Path(eval_path)
     if not eval_path.is_absolute():
         eval_path = REPO_ROOT / eval_path
@@ -209,15 +424,26 @@ def generate_pdf(eval_path: "Path | str") -> str:
             print("[WARN] JD text missing from eval — Claude rewrite skipped, using keyword injection")
         tailored_cv = inject_keywords(base_cv, parsed["keywords"])
 
-    output_path = save_cv(
+    markdown_path, pdf_path = build_output_paths(parsed["company"])
+    save_cv(
         tailored_cv,
+        markdown_path,
         parsed["company"],
         parsed["grade"],
         parsed["jd_source"],
         parsed["interview_angle"],
         eval_path,
     )
-    return str(output_path.relative_to(REPO_ROOT))
+    print(f"[CV] Markdown saved: {markdown_path.relative_to(REPO_ROOT)}")
+
+    try:
+        html_content = render_cv_html(tailored_cv, parsed["company"], parsed["role"])
+        render_pdf(html_content, pdf_path)
+        print(f"[CV] PDF saved: {pdf_path.relative_to(REPO_ROOT)}")
+        return str(pdf_path.relative_to(REPO_ROOT))
+    except Exception as exc:
+        print(f"[WARN] PDF render failed ({exc}) — Markdown kept at {markdown_path.relative_to(REPO_ROOT)}")
+        return str(markdown_path.relative_to(REPO_ROOT))
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
@@ -233,7 +459,7 @@ def main() -> None:
         print(f"Error: {e}")
         sys.exit(1)
 
-    print(f"[CV] Saved to: {rel_path}")
+    print(f"[CV] Main artifact: {rel_path}")
 
 
 if __name__ == "__main__":

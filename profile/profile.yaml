@@ -1,11 +1,67 @@
 # DS-Radar Profile — Renzo Rico
 
 identity:
-  name: Renzo Rico
-  location: London, UK
-  languages: [English, Spanish]
+  name: "Renzo Rico"
+  location: "London, UK (SE1 2LZ)"
+  languages: ["English", "Spanish"]
+  citizenship: "Spanish (EU)"
 
-target_roles:
+contact:
+  email: "renzorico10@gmail.com"          # TODO: replace with real
+  phone: "+44 7765337504"            # TODO: replace with real
+  linkedin_url: "https://linkedin.com/in/renzorico"
+
+experience:
+  - "Data Scientist — Le Wagon, London (2023–present)"
+  - "Freelance Data Scientist (2023–present)"
+  - "BIM Modeler — BAC Engineering / SOCOTEC (2022–2023)"
+
+projects:
+  - "ds-radar: AI-powered job search pipeline (Python, Claude API, Playwright)"
+  - "No botes tu voto: civic tech platform for 2026 Colombian election, 10,000+ users (FastAPI, Next.js, TypeScript, Railway)"
+  - "The London Bible: interactive London data atlas (Python, GeoPandas, Leaflet)"
+  - "ADCC Universe: grappling competition network graph (React, TypeScript, Sigma.js)"
+  - "UN Speeches NLP: NLP pipeline on 8,000+ UN General Debate speeches, topic classification, UMAP, BigQuery backend (Python, scikit-learn, Streamlit)"
+
+education:
+  - "Data Science & AI — Le Wagon, Barcelona (2023)"
+  - "Master's in Construction Management & Sustainability — La Salle Ramon Llull University, Barcelona (Oct 2018 – Jul 2020)"
+
+work_authorization:
+  needs_visa: true
+  visa_type: "Skilled Worker visa (UK)"
+  sponsorship_required: true
+  rules:
+    - "Do not apply to roles that explicitly state no visa sponsorship / must already have right to work / cannot sponsor."
+    - "If sponsorship is not mentioned, treat it as neutral and acceptable."
+    - "Explicit sponsorship offers (visa sponsorship available, skilled worker visa) are a strong plus."
+
+search_priorities:
+  primary_goal: "Secure a stable, data-related role in London with Skilled Worker visa sponsorship."
+  time_horizon_months: 3
+  short_term_notes:
+    - "Right now I care more about stability + sponsorship than perfect role fit."
+    - "I will consider most data-related roles (DS, DA, AE, DE, AI Eng) at junior–mid level if reasonably technical and stable."
+
+roles:
+  target_titles_ordered:
+    - "Data Scientist"
+    - "Machine Learning Engineer"
+    - "AI Engineer"
+    - "Analytics Engineer"
+    - "Data Engineer"
+    - "Data Analyst"
+  acceptable_seniority:
+    min: "Junior"
+    max: "Mid"
+    notes:
+      - "Avoid clearly senior / principal roles that require 7+ years experience or large team management."
+  anti_targets:
+    - "Pure BI/reporting roles where ~80%+ is dashboards/Excel/PowerBI and little ownership."
+    - "Non-technical 'data' roles (e.g. data entry, admin-heavy reporting)."
+    - "Heavily sales/BD-focused 'AI' titles without real technical work."
+
+long_term_targets:
   archetypes:
     - "Data Scientist at tech/AI startup (Series A–C)"
     - "Analytics Engineer at scale-up"
@@ -13,39 +69,161 @@ target_roles:
     - "Data Science Educator / Lead"
     - "AI/LLM Product Developer"
     - "Head of Data at SMB"
+  notes:
+    - "Short-term, any solid data role with sponsorship is acceptable."
+    - "Long-term, prefer roles that move toward these archetypes."
+
+companies:
+  preferred_types_ordered:
+    - "VC-backed tech startups and scale-ups (Series A–D)."
+    - "Product-focused tech companies (fintech, tooling, SaaS, etc.)."
+    - "Strong learning environments in any industry with real DS/ML work."
+  acceptable_types:
+    - "Consultancies / agencies with meaningful data/ML work and clear technical scope."
+    - "Traditional enterprises if the role is clearly technical and stable."
+  deprioritise:
+    - "Body-shop style consultancies with unclear end-clients."
+    - "Roles where data work is obviously secondary to generic consulting deck work."
+  domain_preferences:
+    like:
+      - "Fintech / banking / payments."
+      - "Developer tools / data platforms."
+      - "Education / edtech / training."
+      - "General tech startups with interesting products."
+    neutral:
+      - "Most other industries if the role is solidly data-focused."
+    avoid: []  # no hard domain red lines right now
+
+location:
+  base_city: "London"
+  preferred: ["London", "Remote", "Hybrid"]
+  excluded: []
+  acceptable_modes:
+    - "Remote"
+    - "Hybrid"
+    - "Onsite"
+  commute_preferences:
+    ideal:
+      - "Hybrid or onsite roles within walk or bike distance from SE1 2LZ."
+    acceptable:
+      - "Hybrid across London if role + sponsorship + learning justify the commute."
+    notes:
+      - "Do not reject roles solely on commute grounds at this stage; sponsorship and stability matter more."
+  remote_abroad:
+    allowed_if:
+      - "Company can sponsor a UK Skilled Worker visa (unlikely, but acceptable if available)."
+    default: "Prefer UK employers due to visa situation."
 
 compensation:
-  min_salary_gbp: 40000
-  target_salary_gbp: 60000
-  currency: GBP
+  currency: "GBP"
+  absolute_minimum:
+    base_per_year: 35000
+    notes:
+      - "£35k/year is only acceptable if sponsorship is provided and the role has strong learning/culture."
+  target_range:
+    min: 45000
+    max: 60000
+    notes:
+      - "£45k–£60k/year is the realistic band for junior–mid DS/analytics roles in London right now."
+  stretch_range:
+    min: 60000
+    max: 75000
+    notes:
+      - "Stretch if the role is strong DS/ML/AI in a great environment."
+  tradeoffs:
+    - "Willing to trade some salary for sponsorship + strong culture + learning."
+    - "Visa sponsorship and stability are more important than maximising base in the short term."
 
-skills:
-  must_match:
-    - python
-    - sql
-    - machine learning
-  nice_to_have:
-    - llm
-    - langchain
-    - agentic ai
-    - dbt
-    - spark
-    - tableau
-    - tensorflow
-    - streamlit
+work_content_preferences:
+  # Rough priority: 1 = love, 5 = only if needed
+  priorities:
+    ml_models: 1              # Building & deploying ML models
+    llm_agentic: 1            # LLMs, agents, prompt/flow engineering
+    product_analytics: 2      # Experiments, A/B, analytics for product teams
+    analytics_engineering: 2  # dbt/SQL modeling, data warehouses
+    teaching_enablement: 2    # Teaching, internal workshops, enablement
+    data_engineering: 3       # Pipelines, ETL, infra
+    pure_reporting: 4         # Dashboards, ad-hoc reports
+  notes:
+    - "Right now I will accept more general 'data' work (including some reporting) if the role is stable and sponsored."
+    - "Long term, I want more ML/LLM/agentic and product-facing work."
+
+tech_stack:
+  must_match_skills:
+    - "python"
+    - "sql"
+    - "machine learning"
+  nice_to_have_skills:
+    - "llm"
+    - "langchain"
+    - "agentic ai"
+    - "dbt"
+    - "spark"
+    - "tableau"
+    - "tensorflow"
+    - "streamlit"
+  strong_skills:
+    - "Python (data + ML)."
+    - "SQL."
+    - "JavaScript and TypeScript."
+    - "Pandas / NumPy / scikit-learn."
+    - "TensorFlow/Keras."
+    - "FastAPI."
+    - "NLP and UMAP."
+    - "BigQuery and GCP."
+    - "Docker."
+    - "Vercel and Railway."
+    - "Streamlit."
+    - "Git."
+    - "React."
+    - "LLMs and agentic AI systems."
+    - "Teaching and data/ML instruction."
+    - "Linux / CLI-focused workflows."
+  open_to_learn:
+    - "dbt, modern data stack (Snowflake, BigQuery, etc.)."
+    - "MLOps / deployment tools (CI/CD, Docker, orchestration)."
+    - "Production LLM toolchains (vector DBs, orchestration frameworks)."
+  would_rather_avoid:
+    - "Roles that are 90% Excel-only with little upside."
+    - "Legacy-only tech stacks with no room to learn modern tools."
+
+sponsorship_rules:
+  hard_no_patterns:
+    - "no sponsorship"
+    - "cannot sponsor"
+    - "unable to sponsor"
+    - "must have right to work"
+    - "must already have the right to work"
+    - "without sponsorship"
+    - "do not offer visa sponsorship"
+  positive_patterns:
+    - "visa sponsorship available"
+    - "offer visa sponsorship"
+    - "provide sponsorship"
+    - "skilled worker visa"
+    - "eligible for sponsorship"
+  evaluation:
+    - "If hard_no_patterns are present in the JD, automatically fail the role and skip downstream steps."
+    - "If positive_patterns are present, treat as a strong plus."
+    - "If neither appears, treat sponsorship as neutral and acceptable."
 
 scoring:
-  min_grade_to_apply: B
+  min_grade_to_apply: "B"
   gate_dimensions:
-    - role_match
-    - skills_alignment
-
-locations:
-  preferred: [London, Remote, Hybrid]
-  excluded: []
+    - "role_match"
+    - "skills_alignment"
+  notes:
+    - "Sponsorship gate runs before grade-based gates."
+    - "For now, C roles may still be interesting as 'backup' but are not auto-pipeline targets."
 
 ats_targets:
-  - greenhouse
-  - workable
-  - ashby
-  - lever
+  - "greenhouse"
+  - "workable"
+  - "ashby"
+  - "lever"
+
+meta:
+  last_updated: "2026-04-07"
+  notes:
+    - "Profile tuned for early London job search where stability + sponsorship are more important than perfect role fit."
+    - "Later, re-tighten preferences to focus more on LLM/agentic and product DS once visa is secured."

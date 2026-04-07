@@ -112,27 +112,23 @@ def parse_csv(csv_path: Path) -> list[dict]:
     return records
 
 
-# ── Main ──────────────────────────────────────────────────────────────────────
+# ── Importable entry point ────────────────────────────────────────────────────
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Import LinkedIn jobs into ds-radar queue")
-    parser.add_argument("--csv", type=Path, default=DEFAULT_CSV, metavar="PATH",
-                        help=f"LinkedIn CSV (default: {DEFAULT_CSV})")
-    parser.add_argument("--min-score", type=float, default=0.6, metavar="FLOAT",
-                        help="Minimum relevance_score (default: 0.6)")
-    parser.add_argument("--max-age-days", type=int, default=45, metavar="INT",
-                        help="Max job age in days (default: 45)")
-    parser.add_argument("--dry-run", action="store_true",
-                        help="Print what would happen without writing files")
-    args = parser.parse_args()
+def run_import(
+    csv_path: "Path | None" = None,
+    min_score: float = 0.6,
+    max_age_days: int = 45,
+    dry_run: bool = False,
+) -> tuple[dict, list[str]]:
+    """Run the LinkedIn import. Returns (stats_dict, queued_urls_list).
 
-    if args.dry_run:
-        print("[DRY RUN] No files will be modified.")
-
-    records = parse_csv(args.csv)
+    Suitable for calling from auto_pipeline without subprocess.
+    """
+    csv_path = csv_path or DEFAULT_CSV
+    records = parse_csv(csv_path)
     seen_urls = load_seen_urls()
     queued_urls = load_queued_urls()
-    cutoff = date.today() - timedelta(days=args.max_age_days)
+    cutoff = date.today() - timedelta(days=max_age_days)
     today_str = date.today().isoformat()
 
     skipped_score = skipped_age = skipped_history = 0
@@ -140,21 +136,17 @@ def main() -> None:
     to_history: list[dict] = []
 
     for rec in records:
-        if rec["relevance_score"] < args.min_score:
+        if rec["relevance_score"] < min_score:
             skipped_score += 1
             continue
         if rec["posted"] is None or rec["posted"] < cutoff:
             skipped_age += 1
             continue
         url = rec["target_url"]
-        if not url:
+        if not url or url in seen_urls or url in queued_urls:
             skipped_history += 1
             continue
-        if url in seen_urls or url in queued_urls:
-            skipped_history += 1
-            continue
-
-        queued_urls.add(url)  # prevent duplicates within this run
+        queued_urls.add(url)
         to_queue.append(url)
         to_history.append({
             "source":               rec["source"],
@@ -172,15 +164,46 @@ def main() -> None:
             "target_url":           rec["target_url"],
         })
 
-    append_to_queue(to_queue, args.dry_run)
-    append_to_source_history(to_history, args.dry_run)
+    append_to_queue(to_queue, dry_run)
+    append_to_source_history(to_history, dry_run)
 
-    total = len(records)
-    queued = len(to_queue)
+    stats = {
+        "total": len(records), "kept": len(to_queue),
+        "skipped_score": skipped_score,
+        "skipped_age": skipped_age,
+        "skipped_history": skipped_history,
+    }
+    return stats, to_queue
+
+
+# ── Main ──────────────────────────────────────────────────────────────────────
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Import LinkedIn jobs into ds-radar queue")
+    parser.add_argument("--csv", type=Path, default=DEFAULT_CSV, metavar="PATH",
+                        help=f"LinkedIn CSV (default: {DEFAULT_CSV})")
+    parser.add_argument("--min-score", type=float, default=0.6, metavar="FLOAT",
+                        help="Minimum relevance_score (default: 0.6)")
+    parser.add_argument("--max-age-days", type=int, default=45, metavar="INT",
+                        help="Max job age in days (default: 45)")
+    parser.add_argument("--dry-run", action="store_true",
+                        help="Print what would happen without writing files")
+    args = parser.parse_args()
+
+    if args.dry_run:
+        print("[DRY RUN] No files will be modified.")
+
+    stats, to_queue = run_import(
+        csv_path=args.csv,
+        min_score=args.min_score,
+        max_age_days=args.max_age_days,
+        dry_run=args.dry_run,
+    )
+    total, queued = stats["total"], stats["kept"]
     print(
         f"[IMPORT_LINKEDIN] rows={total} kept={queued} "
-        f"skipped_score={skipped_score} skipped_age={skipped_age} "
-        f"skipped_history={skipped_history} queued={queued}"
+        f"skipped_score={stats['skipped_score']} skipped_age={stats['skipped_age']} "
+        f"skipped_history={stats['skipped_history']} queued={queued}"
     )
 
     if args.dry_run and to_queue:

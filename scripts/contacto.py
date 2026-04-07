@@ -218,45 +218,41 @@ def build_outreach_template(
     company: str, title: str, grade: str, name: str | None
 ) -> dict:
     greeting = f"Hi {name}" if name else "Hi"
-    fit_phrase = "strong mutual fit" if grade in APPLY_GRADES else "interesting opportunity"
+    dream = f"""\
+{greeting},
 
-    short = (
-        f"{greeting} — saw the {title} role at {company}. "
-        f"My background in Python/ML and DS instruction could be a great fit. "
-        f"Happy to connect!"
-    )
+I’m a data scientist in London — currently teaching DS at Le Wagon and building projects on the side, including an AI pipeline in Python/Claude/Playwright and a civic tech platform that reached 10k+ users.
+
+The {title} role at {company} stands out because it looks close to real product data work rather than generic analytics. My background is strongest in Python, SQL, ML, NLP, and shipping practical tools end to end.
+
+Happy to send a short portfolio if useful.
+
+Renzo"""
+
+    bridge = f"""\
+{greeting},
+
+I’m a data scientist based in London. I teach DS at Le Wagon and build projects ranging from NLP pipelines and geospatial analysis to deployed web products in FastAPI and TypeScript.
+
+The {title} role at {company} looks like solid technical work with a usable stack. I’m looking for solid technical data work in London right now, and this looks like a good fit on the stack and scope.
+
+Happy to share more if it’s worth a conversation.
+
+Renzo"""
+
+    backup = f"""\
+{greeting},
+
+Data scientist in London — Python, SQL, ML, deployed projects. I came across the {title} role at {company} and wanted to connect directly before applying. Happy to share a portfolio if helpful.
+
+Renzo"""
+
+    short = backup.replace("\n\nRenzo", " Renzo")
     if len(short) > 300:
         short = short[:297] + "..."
 
-    standard = f"""\
-{greeting},
-
-I came across the {title} opening at {company} and wanted to reach out directly.
-
-I'm a Data Scientist based in London with experience in Python, ML, and teaching \
-at Le Wagon — I've also been building agentic AI tools as side projects, including \
-a job-search pipeline using Claude API and Playwright.
-
-I see a {fit_phrase} between my background and what {company} is building. \
-Would love to connect and learn more about the team.
-
-Best,
-Renzo"""
-
-    value_first = f"""\
-{greeting},
-
-One thing I'm proud of: I've mentored 200+ students through end-to-end ML projects \
-at Le Wagon, and recently built an agentic pipeline ({company} is actually on my \
-radar list!) that automates job discovery and CV tailoring using Claude API.
-
-I think that combination of applied ML, teaching, and hands-on AI development maps \
-well to the {title} role at {company}.
-
-Would you be open to a quick chat?
-
-Best,
-Renzo"""
+    standard = dream if grade in APPLY_GRADES else bridge
+    value_first = bridge if grade in APPLY_GRADES else backup
 
     return {
         "short": short,
