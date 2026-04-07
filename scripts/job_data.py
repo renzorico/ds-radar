@@ -10,6 +10,11 @@ import re
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+try:
+    from identity import artifact_job_key, build_job_key, load_artifact_index
+except ImportError:  # pragma: no cover - module execution fallback
+    from scripts.identity import artifact_job_key, build_job_key, load_artifact_index
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 TRACKER = REPO_ROOT / "tracker.tsv"
 SOURCE_HISTORY = REPO_ROOT / "source-history.tsv"
@@ -162,20 +167,107 @@ def _company_date_key(row: dict) -> tuple[str, str]:
     return slugify(row.get("company", "")), row.get("date", "").strip()
 
 
+def build_eval_job_key_map(tracker_rows: list[dict], scan_rows: list[dict]) -> dict[str, str]:
+    keys: dict[str, str] = {}
+    row_key_by_url = {
+        row.get("url", "").strip(): build_job_key(
+            url=row.get("url", ""),
+            company=row.get("company", ""),
+            title=row.get("role", ""),
+        )
+        for row in tracker_rows
+        if row.get("url")
+    }
+    for scan_row in scan_rows:
+        eval_path = scan_row.get("eval_path", "").strip()
+        url = scan_row.get("url", "").strip()
+        if not eval_path:
+            continue
+        job_key = row_key_by_url.get(url) or build_job_key(url=url)
+        if job_key:
+            keys[eval_path] = job_key
+            keys[Path(eval_path).name] = job_key
+    return keys
+
+
+def _candidate_matches_row(
+    path: Path,
+    row_job_key: str,
+    company_slug: str,
+    role_slug: str,
+    job_slug: str,
+    artifact_index: dict[str, dict],
+    eval_job_keys: dict[str, str],
+) -> bool:
+    candidate_key = artifact_job_key(path, artifact_index, eval_job_keys)
+    if row_job_key and candidate_key:
+        return row_job_key == candidate_key
+    return _artifact_matches_row(path, company_slug, role_slug, job_slug)
+
+
+def _artifact_candidate_groups(
+    row: dict,
+    company: str,
+    role: str,
+    candidates: list[Path],
+    artifact_index: dict[str, dict],
+    eval_job_keys: dict[str, str],
+) -> tuple[list[Path], list[Path]]:
+    company_slug = slugify(company)
+    role_slug = short_role_slug(role)
+    job_slug = url_job_slug(row.get("url", ""))
+    row_job_key = build_job_key(url=row.get("url", ""), company=company, title=role)
+    exact_matches: list[Path] = []
+    heuristic_matches: list[Path] = []
+
+    for candidate in candidates:
+        candidate_key = artifact_job_key(candidate, artifact_index, eval_job_keys)
+        if row_job_key and candidate_key:
+            if row_job_key == candidate_key:
+                exact_matches.append(candidate)
+            continue
+        if _artifact_matches_row(candidate, company_slug, role_slug, job_slug):
+            heuristic_matches.append(candidate)
+
+    return exact_matches, heuristic_matches
+
+
 def resolve_cv_path(
     row: dict,
     company: str,
     role: str,
     related_rows: list[dict],
+    artifact_index: dict[str, dict],
+    eval_job_keys: dict[str, str],
 ) -> Path | None:
     company_slug = slugify(company)
-    role_slug = short_role_slug(role)
-    job_slug = url_job_slug(row.get("url", ""))
     tracker_path = row.get("pdf_path", "").strip()
     if tracker_path:
         candidate = REPO_ROOT / tracker_path
-        if candidate.exists() and _artifact_matches_row(candidate, company_slug, role_slug, job_slug):
+        role_slug = short_role_slug(role)
+        job_slug = url_job_slug(row.get("url", ""))
+        row_job_key = build_job_key(url=row.get("url", ""), company=company, title=role)
+        if candidate.exists() and _candidate_matches_row(
+            candidate,
+            row_job_key,
+            company_slug,
+            role_slug,
+            job_slug,
+            artifact_index,
+            eval_job_keys,
+        ):
             return candidate
+
+    all_candidates: list[Path] = []
+    for pattern in ("cv_{slug}_*.pdf", "cv_{slug}_*.md"):
+        all_candidates.extend(sorted(APPLICATIONS.glob(pattern.format(slug=company_slug)), reverse=True))
+
+    exact_matches, heuristic_matches = _artifact_candidate_groups(
+        row, company, role, all_candidates, artifact_index, eval_job_keys
+    )
+
+    if exact_matches:
+        return exact_matches[0]
 
     if len(related_rows) == 1:
         for pattern in ("cv_{slug}_*.pdf", "cv_{slug}_*.md"):
@@ -183,10 +275,8 @@ def resolve_cv_path(
             if candidate:
                 return candidate
 
-    for pattern in ("cv_{slug}_*.pdf", "cv_{slug}_*.md"):
-        for candidate in sorted(APPLICATIONS.glob(pattern.format(slug=company_slug)), reverse=True):
-            if _artifact_matches_row(candidate, company_slug, role_slug, job_slug):
-                return candidate
+    if heuristic_matches:
+        return heuristic_matches[0]
     return None
 
 
@@ -197,17 +287,79 @@ def resolve_related_artifact(
     related_rows: list[dict],
     directory: Path,
     pattern: str,
+    artifact_index: dict[str, dict],
+    eval_job_keys: dict[str, str],
 ) -> Path | None:
     company_slug = slugify(company)
-    role_slug = short_role_slug(role)
-    job_slug = url_job_slug(row.get("url", ""))
     candidates = sorted(directory.glob(pattern.format(slug=company_slug)), reverse=True)
+    exact_matches, heuristic_matches = _artifact_candidate_groups(
+        row, company, role, candidates, artifact_index, eval_job_keys
+    )
+
+    if exact_matches:
+        return exact_matches[0]
     if len(related_rows) == 1:
         return candidates[0] if candidates else None
-    for candidate in candidates:
-        if _artifact_matches_row(candidate, company_slug, role_slug, job_slug):
-            return candidate
+    if heuristic_matches:
+        return heuristic_matches[0]
     return None
+
+
+def get_apply_preflight(url: str) -> dict | None:
+    tracker_rows = load_tsv(TRACKER)
+    scan_rows = load_tsv(SCAN_HISTORY)
+    artifact_index = load_artifact_index()
+    eval_job_keys = build_eval_job_key_map(tracker_rows, scan_rows)
+    rows_by_company_date: dict[tuple[str, str], list[dict]] = {}
+    for tracker_row in tracker_rows:
+        rows_by_company_date.setdefault(_company_date_key(tracker_row), []).append(tracker_row)
+
+    row = next((item for item in tracker_rows if item.get("url", "").strip() == url.strip()), None)
+    records = load_job_records(sort_by="date")
+    record = next((item for item in records if item.url == url.strip()), None)
+    if row is None or record is None:
+        return None
+
+    company = row.get("company", "").strip()
+    role = row.get("role", "").strip()
+    job_key = build_job_key(url=url, company=company, title=role)
+    related_rows = rows_by_company_date.get(_company_date_key(row), [])
+
+    tracker_candidate = row.get("pdf_path", "").strip()
+    candidates: list[Path] = []
+    if tracker_candidate:
+        tracker_path = REPO_ROOT / tracker_candidate
+        if tracker_path.exists():
+            candidates.append(tracker_path)
+    company_slug = slugify(company)
+    for pattern in ("cv_{slug}_*.pdf", "cv_{slug}_*.md"):
+        for candidate in sorted(APPLICATIONS.glob(pattern.format(slug=company_slug)), reverse=True):
+            if candidate not in candidates:
+                candidates.append(candidate)
+
+    exact_matches, heuristic_matches = _artifact_candidate_groups(
+        row, company, role, candidates, artifact_index, eval_job_keys
+    )
+
+    preferred_candidates = exact_matches or heuristic_matches
+    upload_candidates = [path for path in preferred_candidates if path.suffix.lower() == ".pdf"]
+    chosen_cv = upload_candidates[0] if len(upload_candidates) == 1 else None
+    ambiguous = len(upload_candidates) > 1
+
+    if not chosen_cv and len(related_rows) == 1 and not exact_matches and not heuristic_matches:
+        fallback = find_latest_artifact(company, "cv_{slug}_*.pdf", APPLICATIONS)
+        if fallback:
+            chosen_cv = fallback
+
+    return {
+        "record": record,
+        "job_key": job_key,
+        "cv_path": str(chosen_cv.relative_to(REPO_ROOT)) if chosen_cv else "",
+        "cv_candidates": [str(path.relative_to(REPO_ROOT)) for path in preferred_candidates],
+        "cv_upload_candidates": [str(path.relative_to(REPO_ROOT)) for path in upload_candidates],
+        "ambiguous_cv": ambiguous or len(preferred_candidates) > 1 and not upload_candidates,
+        "ready": bool(chosen_cv),
+    }
 
 
 def read_eval_meta(eval_path: Path | None, tracker_notes: str) -> tuple[str, str]:
@@ -296,7 +448,10 @@ def filter_records(records: list[JobRecord], filter_name: str) -> list[JobRecord
 def load_job_records(sort_by: str = "date") -> list[JobRecord]:
     tracker_rows = load_tsv(TRACKER)
     source_index = build_index(load_tsv(SOURCE_HISTORY), "target_url")
-    scan_index = build_index(load_tsv(SCAN_HISTORY), "url")
+    scan_rows = load_tsv(SCAN_HISTORY)
+    scan_index = build_index(scan_rows, "url")
+    artifact_index = load_artifact_index()
+    eval_job_keys = build_eval_job_key_map(tracker_rows, scan_rows)
     rows_by_company_date: dict[tuple[str, str], list[dict]] = {}
     for tracker_row in tracker_rows:
         rows_by_company_date.setdefault(_company_date_key(tracker_row), []).append(tracker_row)
@@ -319,12 +474,12 @@ def load_job_records(sort_by: str = "date") -> list[JobRecord]:
             jd_src, spons = read_eval_meta(eval_path, notes)
 
         oferta_path = resolve_related_artifact(
-            row, company, role, related_rows, EVALS_DIR, "deep_{slug}_*.md"
+            row, company, role, related_rows, EVALS_DIR, "deep_{slug}_*.md", artifact_index, eval_job_keys
         )
         outreach_path = resolve_related_artifact(
-            row, company, role, related_rows, APPLICATIONS, "outreach_{slug}_*.md"
+            row, company, role, related_rows, APPLICATIONS, "outreach_{slug}_*.md", artifact_index, eval_job_keys
         )
-        cv_path = resolve_cv_path(row, company, role, related_rows)
+        cv_path = resolve_cv_path(row, company, role, related_rows, artifact_index, eval_job_keys)
 
         excerpt = extract_markdown_section(oferta_path, ["## 1. Executive Summary"])
         if not excerpt:

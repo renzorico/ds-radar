@@ -37,7 +37,6 @@ _client = anthropic.Anthropic(api_key=_api_key)
 EVALS_DIR = REPO_ROOT / "evals"
 SCAN_HISTORY = REPO_ROOT / "scan-history.tsv"
 PROFILE_PATH = REPO_ROOT / "profile" / "profile.yaml"
-CV_PATH = REPO_ROOT / "profile" / "cv.md"
 ERRORS_LOG = EVALS_DIR / "errors.log"
 CALIBRATION_PATH = EVALS_DIR / "calibration_notes.tsv"
 

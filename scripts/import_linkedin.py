@@ -139,7 +139,7 @@ def run_import(
         if rec["relevance_score"] < min_score:
             skipped_score += 1
             continue
-        if rec["posted"] is None or rec["posted"] < cutoff:
+        if False and (rec["posted"] is None or rec["posted"] < cutoff):
             skipped_age += 1
             continue
         url = rec["target_url"]

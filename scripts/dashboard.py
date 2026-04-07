@@ -7,21 +7,43 @@ from __future__ import annotations
 
 import argparse
 import os
+import random
 import shlex
+import shutil
 import subprocess
 import sys
-from dataclasses import dataclass
+import time
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from prompt_toolkit.application import Application, run_in_terminal
+from prompt_toolkit.filters import Condition
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.layout import HSplit, Layout, VSplit, Window
+from prompt_toolkit.layout.containers import ConditionalContainer, Float, FloatContainer
 from prompt_toolkit.layout.controls import FormattedTextControl
 from prompt_toolkit.layout.dimension import Dimension
 from prompt_toolkit.styles import Style
 from prompt_toolkit.widgets import Frame
 
-from job_data import FILTER_OPTIONS, JobRecord, filter_records, load_job_records, update_tracker_status
+try:
+    from job_data import (
+        FILTER_OPTIONS,
+        JobRecord,
+        filter_records,
+        get_apply_preflight,
+        load_job_records,
+        update_tracker_status,
+    )
+except ImportError:  # pragma: no cover - module execution fallback
+    from scripts.job_data import (
+        FILTER_OPTIONS,
+        JobRecord,
+        filter_records,
+        get_apply_preflight,
+        load_job_records,
+        update_tracker_status,
+    )
 
 VISIBLE_ROWS = 18
 FILTER_LABELS = {
@@ -35,9 +57,152 @@ STATUS_ACTIONS = {
     "u": "evaluated",
     "v": "cv_ready",
     "a": "applied",
-    "k": "skipped",
+    "x": "skipped",
+    "K": "skipped",
 }
 REPO_ROOT = Path(__file__).resolve().parent.parent
+FOCUS_ORDER = ["jobs", "evaluation", "details"]
+KEY_HINTS = (
+    "Keys: 1-5 filters  j/k or arrows move  h/l switch pane  e eval  c cv  o outreach  "
+    "p apply  m toggle MOCK  u evaluated  v cv_ready  a applied  x skipped  ? help  q quit"
+)
+
+
+class Pet:
+    """Tiny ASCII companion for the cockpit footer.
+
+    The pet updates on a timer so it still feels alive when the user is idle.
+    Event handlers can temporarily override the mood for a few seconds.
+    """
+
+    TICK_INTERVAL = 0.45
+    MOOD_HOLD_SECONDS = 4.0
+
+    def __init__(self) -> None:
+        self.x = 0
+        self.direction = 1
+        self.mood = "idle"
+        self.frame = 0
+        self.last_tick = 0.0
+        self.last_width = 0
+        self.action = "walk"
+        self.mood_until = 0.0
+
+    def on_event(self, event: str) -> None:
+        now = time.monotonic()
+        if event in {"cv_ready", "applied", "good_grade"}:
+            self.mood = "happy"
+            self.action = "celebrate"
+            self.mood_until = now + self.MOOD_HOLD_SECONDS
+            return
+        if event == "bad_grade":
+            self.mood = "concerned"
+            self.action = "sit"
+            self.mood_until = now + self.MOOD_HOLD_SECONDS
+            return
+        self.mood = "idle"
+        self.action = "walk"
+        self.mood_until = 0.0
+
+    def tick(self, width: int) -> None:
+        try:
+            now = time.monotonic()
+            if width <= 8:
+                self.last_width = width
+                return
+            if self.last_width and self.last_width != width:
+                self.x = min(self.x, max(0, width - self.sprite_width()))
+            self.last_width = width
+            if now - self.last_tick < self.TICK_INTERVAL:
+                return
+            self.last_tick = now
+            self.frame = (self.frame + 1) % 4
+
+            if self.mood_until and now >= self.mood_until:
+                self.mood = "idle"
+                self.action = "walk"
+                self.mood_until = 0.0
+
+            if self.action == "walk":
+                self.x += self.direction
+            elif self.action == "look":
+                pass
+            elif self.action == "sit":
+                if self.frame % 2 == 0:
+                    self.action = "walk"
+            elif self.action == "celebrate":
+                self.x += self.direction
+                if self.frame % 2 == 1:
+                    self.action = "walk"
+
+            limit = max(0, width - self.sprite_width())
+            if self.x <= 0:
+                self.x = 0
+                self.direction = 1
+            elif self.x >= limit:
+                self.x = limit
+                self.direction = -1
+
+            if self.mood == "idle" and random.random() < 0.12:
+                self.action = random.choice(["look", "sit", "walk"])
+        except Exception:
+            self.mood = "idle"
+            self.action = "walk"
+
+    def sprite_width(self) -> int:
+        return 7
+
+    def _sprite(self) -> tuple[str, str, str]:
+        right = self.direction >= 0
+        if self.mood == "happy":
+            return (r" \o/   ", r"  |    ", r" / \   ")
+        if self.mood == "concerned":
+            eyes = "o ." if right else ". o"
+            return (r"  __   ", f" ({eyes}) ", r" /__\  ")
+        if self.action == "sit":
+            return (r"  __   ", r" (uu)  ", r" _||_  ")
+        if self.action == "look":
+            eyes = "o o" if self.frame % 2 == 0 else "o O"
+            return (r"  __   ", f" ({eyes}) ", r" /__\  ")
+        if right:
+            feet = r" _/ \  " if self.frame % 2 == 0 else r" / \_  "
+            return (r"  __   ", r" (o>)  ", feet)
+        feet = r"  / \_ " if self.frame % 2 == 0 else r" _/ \  "
+        return (r"  __   ", r" (<o)  ", feet)
+
+    def _place(self, width: int, text: str) -> str:
+        if width <= 0:
+            return ""
+        x = max(0, min(self.x, max(0, width - len(text))))
+        line = [" "] * width
+        for idx, char in enumerate(text[:width]):
+            target = x + idx
+            if target >= width:
+                break
+            line[target] = char
+        return "".join(line).rstrip() or " "
+
+    def render(self, width: int) -> list[tuple[str, str]]:
+        try:
+            self.tick(width)
+            if width < 16:
+                return []
+            top, mid, low = self._sprite()
+            style = "class:pet_happy" if self.mood == "happy" else "class:pet_warn" if self.mood == "concerned" else "class:pet"
+            floor = "_" * max(0, width - 1)
+            lines = [
+                (style, self._place(width, top)),
+                (style, self._place(width, mid)),
+                ("class:pet_floor", floor),
+            ]
+            fragments: list[tuple[str, str]] = []
+            for idx, (line_style, line) in enumerate(lines):
+                fragments.append((line_style, line))
+                if idx < len(lines) - 1:
+                    fragments.append(("", "\n"))
+            return fragments
+        except Exception:
+            return []
 
 
 @dataclass
@@ -46,16 +211,27 @@ class DashboardState:
     filter_name: str = "all"
     selected_index: int = 0
     message: str = ""
-    apply_dry_run: bool = False
+    apply_dry_run: bool = True
     pending_apply_url: str = ""
+    apply_preflight: dict | None = None
+    focus_pane: str = "jobs"
+    help_visible: bool = False
+    eval_scroll: int = 0
+    detail_scroll: int = 0
+    show_mock: bool = False
+    pet: Pet = field(default_factory=Pet)
 
     def __post_init__(self) -> None:
         self.records = load_job_records(sort_by=self.sort_by)
         self._clamp_index()
+        self.sync_pet_to_current_record()
 
     @property
     def filtered_records(self) -> list[JobRecord]:
-        return filter_records(self.records, self.filter_name)
+        rows = filter_records(self.records, self.filter_name)
+        if self.show_mock:
+            return rows
+        return [record for record in rows if (record.jd_src or "").upper() == "REAL"]
 
     def current_record(self) -> JobRecord | None:
         rows = self.filtered_records
@@ -74,12 +250,43 @@ class DashboardState:
     def move(self, delta: int) -> None:
         self.selected_index += delta
         self._clamp_index()
+        self.sync_pet_to_current_record()
+
+    def switch_focus(self, delta: int) -> None:
+        index = FOCUS_ORDER.index(self.focus_pane)
+        index = max(0, min(index + delta, len(FOCUS_ORDER) - 1))
+        self.focus_pane = FOCUS_ORDER[index]
+        self.message = f"Focus: {self.focus_pane.title()}"
+
+    def scroll_active_pane(self, delta: int) -> None:
+        if self.focus_pane == "jobs":
+            self.move(delta)
+            return
+        if self.focus_pane == "evaluation":
+            self.eval_scroll = max(0, self.eval_scroll + delta)
+            return
+        self.detail_scroll = max(0, self.detail_scroll + delta)
 
     def set_filter(self, filter_name: str) -> None:
         self.filter_name = filter_name
         self.selected_index = 0
         self._clamp_index()
+        self.eval_scroll = 0
+        self.detail_scroll = 0
+        self.sync_pet_to_current_record()
         self.message = f"Filter: {FILTER_LABELS[filter_name]}"
+
+    def toggle_mock(self) -> None:
+        self.show_mock = not self.show_mock
+        self.selected_index = 0
+        self._clamp_index()
+        self.eval_scroll = 0
+        self.detail_scroll = 0
+        self.sync_pet_to_current_record()
+        if self.show_mock:
+            self.message = "Filter: REAL + MOCK"
+        else:
+            self.message = "Filter: REAL only"
 
     def reload(self) -> None:
         current_url = self.current_record().url if self.current_record() else ""
@@ -91,6 +298,7 @@ class DashboardState:
                     self.selected_index = index
                     break
         self._clamp_index()
+        self.sync_pet_to_current_record()
         self.message = "Reloaded tracker and filesystem artifacts."
 
     def set_status(self, status: str) -> None:
@@ -100,6 +308,8 @@ class DashboardState:
             return
         if update_tracker_status(record.url, status):
             self.reload()
+            if status in {"cv_ready", "applied"}:
+                self.pet.on_event(status)
             self.message = f"Status updated: {record.company} -> {status}"
         else:
             self.message = f"Status update failed for {record.company}."
@@ -109,25 +319,68 @@ class DashboardState:
         if record is None:
             self.message = "No row selected."
             return
+        preflight = get_apply_preflight(record.url)
+        if preflight is None:
+            self.clear_apply_request()
+            self.message = "Apply aborted: could not load preflight data for selected row."
+            return
+
+        self.apply_preflight = preflight
+        mode = "DRY-RUN" if self.apply_dry_run else "LIVE"
+        cv_path = preflight.get("cv_path", "")
+        candidates = preflight.get("cv_candidates", [])
+        if preflight.get("ambiguous_cv"):
+            self.clear_apply_request()
+            shown = ", ".join(candidates[:3]) if candidates else "none"
+            self.message = f"No unambiguous CV for this job; fix artifacts or tracker before applying. Candidates: {shown}"
+            return
+        if not cv_path:
+            self.clear_apply_request()
+            self.message = "Apply aborted: no PDF CV resolved for this job."
+            return
+
         self.pending_apply_url = record.url
-        suffix = " --dry-run" if self.apply_dry_run else ""
-        self.message = f"Apply to {record.company} — {record.role}? [y/N]{suffix}"
+        self.message = f"Preflight OK [{mode}] {record.company} | CV={cv_path}. Confirm apply? [y/N]"
 
     def clear_apply_request(self) -> None:
         self.pending_apply_url = ""
+        self.apply_preflight = None
+
+    def toggle_help(self) -> None:
+        self.help_visible = not self.help_visible
+        if self.help_visible:
+            self.message = "Help overlay open. Press ? or Esc to close."
+        else:
+            self.message = "Help overlay closed."
+
+    def sync_pet_to_current_record(self) -> None:
+        record = self.current_record()
+        if record is None:
+            self.pet.on_event("reset")
+            return
+        if record.grade in {"A", "B"}:
+            self.pet.on_event("good_grade")
+        elif record.grade in {"D", "F"}:
+            self.pet.on_event("bad_grade")
+        else:
+            self.pet.on_event("reset")
 
 
-def build_apply_command(url: str, dry_run: bool) -> list[str]:
+def build_apply_command(url: str, dry_run: bool, cv_path: str = "", job_key: str = "") -> list[str]:
     command = [sys.executable, "scripts/apply.py"]
     if dry_run:
         command.append("--dry-run")
+    if cv_path:
+        command.extend(["--cv-path", cv_path])
+    if job_key:
+        command.extend(["--job-key", job_key])
     command.append(url)
     return command
 
 
-def run_apply_command(url: str, dry_run: bool) -> subprocess.CompletedProcess[str]:
+def run_apply_command(url: str, dry_run: bool, cv_path: str = "", job_key: str = "") -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        build_apply_command(url, dry_run),
+        build_apply_command(url, dry_run, cv_path=cv_path, job_key=job_key),
         cwd=REPO_ROOT,
         text=True,
         check=False,
@@ -135,10 +388,13 @@ def run_apply_command(url: str, dry_run: bool) -> subprocess.CompletedProcess[st
 
 
 def startup_log(state: DashboardState) -> str:
-    counts = {name: len(filter_records(state.records, name)) for name in FILTER_OPTIONS}
+    counts = {
+        name: len([record for record in filter_records(state.records, name) if state.show_mock or (record.jd_src or "").upper() == "REAL"])
+        for name in FILTER_OPTIONS
+    }
     return (
         "[dashboard] loaded tracker review cockpit\n"
-        f"[dashboard] rows={len(state.records)} sort={state.sort_by} "
+        f"[dashboard] rows={len(state.filtered_records)} sort={state.sort_by} mock={'on' if state.show_mock else 'off'} "
         f"filters=all:{counts['all']} b_plus:{counts['b_plus']} "
         f"sponsorship_fail:{counts['sponsorship_fail']} linkedin:{counts['linkedin_only']} "
         f"ready:{counts['ready']}"
@@ -149,12 +405,34 @@ def format_path(path_text: str) -> str:
     return path_text if path_text else "—"
 
 
+def pane_title(state: DashboardState, pane: str, label: str) -> tuple[str, str]:
+    style = "class:pane_active" if state.focus_pane == pane else "class:pane_inactive"
+    marker = "▸" if state.focus_pane == pane else " "
+    return style, f"{marker} {label}"
+
+
+def _slice_lines(lines: list[tuple[str, str]], offset: int) -> list[tuple[str, str]]:
+    chunks = []
+    for style, text in lines:
+        pieces = text.splitlines() or [text]
+        for piece in pieces:
+            chunks.append((style, piece))
+    visible = chunks[offset:]
+    if not visible:
+        return [("class:muted", "No additional content.")]
+    output: list[tuple[str, str]] = []
+    for idx, (style, line) in enumerate(visible):
+        output.append((style, line))
+        if idx < len(visible) - 1:
+            output.append(("", "\n"))
+    return output
+
+
 def render_table(state: DashboardState) -> list[tuple[str, str]]:
     rows = state.filtered_records
-    fragments: list[tuple[str, str]] = []
+    fragments: list[tuple[str, str]] = [pane_title(state, "jobs", "Jobs"), ("", "\n")]
     header = (
-        f"{'DATE':<10} {'G':<2} {'SRC':<8} {'JD':<4} {'SP':<4} "
-        f"{'CV':<3} {'OFE':<3} {'CON':<3} {'COMPANY':<18} ROLE"
+        f"{'DATE':<10} {'G':<2} {'JD':<4} {'SP':<4} {'COMPANY':<18} ROLE"
     )
     fragments.append(("class:header", header))
     fragments.append(("", "\n"))
@@ -172,8 +450,8 @@ def render_table(state: DashboardState) -> list[tuple[str, str]]:
         style = "class:selected" if index == state.selected_index else ""
         prefix = ">" if index == state.selected_index else " "
         line = (
-            f"{prefix} {record.date:<10} {record.grade:<2} {record.source:<8} {record.jd_src:<4} "
-            f"{record.spons:<4} {record.cv:<3} {record.ofe:<3} {record.con:<3} "
+            f"{prefix} {record.date:<10} {record.grade:<2} {record.jd_src:<4} "
+            f"{record.spons:<4} "
             f"{record.company[:18]:<18} {record.role[:34]}"
         )
         fragments.append((style, line))
@@ -188,30 +466,69 @@ def render_table(state: DashboardState) -> list[tuple[str, str]]:
     return fragments
 
 
+def render_evaluation(state: DashboardState) -> list[tuple[str, str]]:
+    record = state.current_record()
+    if record is None:
+        return [("class:muted", "No record selected.")]
+
+    grade_style = f"class:grade_{record.grade.lower()}"
+    lines = [
+        pane_title(state, "evaluation", "Evaluation"),
+        ("", "\n"),
+        (grade_style, f"Grade {record.grade}"),
+        ("class:score", f"  Score {record.score}\n"),
+        ("", f"Status: {record.status}\n"),
+        ("", f"Source: {record.source}\n"),
+        ("", f"JD Source: {record.jd_src}\n"),
+        ("", f"Sponsorship: {record.spons}\n"),
+        ("", f"Ready to apply: {'yes' if record.ready_to_apply else 'no'}\n\n"),
+        ("class:label", "Paths\n"),
+        ("", f"Eval: {format_path(record.eval_path)}\n"),
+        ("", f"CV: {format_path(record.cv_path)}\n"),
+        ("", f"Oferta: {format_path(record.oferta_path)}\n"),
+        ("", f"Outreach: {format_path(record.outreach_path)}\n\n"),
+        ("class:label", "URLs\n"),
+        ("", f"{record.url}\n"),
+    ]
+
+    if state.apply_preflight and state.pending_apply_url == record.url:
+        mode = "DRY-RUN" if state.apply_dry_run else "LIVE"
+        candidates = state.apply_preflight.get("cv_candidates", [])
+        lines.extend(
+            [
+                ("class:label", "Apply Preflight\n"),
+                ("", f"Mode: {mode}\n"),
+                ("", f"Job key: {state.apply_preflight.get('job_key') or '—'}\n"),
+                ("", f"Chosen CV: {state.apply_preflight.get('cv_path') or '—'}\n"),
+                ("", f"Candidates: {', '.join(candidates) if candidates else '—'}\n"),
+            ]
+        )
+    return _slice_lines(lines, state.eval_scroll)
+
+
 def render_details(state: DashboardState) -> list[tuple[str, str]]:
     record = state.current_record()
     if record is None:
         return [("class:muted", "No record selected.")]
 
     lines = [
-        ("class:title", f"{record.company} | {record.role}\n"),
-        ("", f"Grade: {record.grade} | Score: {record.score} | Status: {record.status}\n"),
-        ("", f"Source: {record.source} | JD: {record.jd_src} | Sponsorship: {record.spons}\n"),
-        ("", f"Ready to apply: {'yes' if record.ready_to_apply else 'no'}\n"),
-        ("", f"URL: {record.url}\n\n"),
-        ("class:label", "Paths\n"),
-        ("", f"Eval: {format_path(record.eval_path)}\n"),
-        ("", f"CV: {format_path(record.cv_path)}\n"),
-        ("", f"Oferta: {format_path(record.oferta_path)}\n"),
-        ("", f"Outreach: {format_path(record.outreach_path)}\n\n"),
+        pane_title(state, "details", "Details"),
+        ("", "\n"),
         ("class:label", "Excerpt\n"),
         ("", f"{record.eval_excerpt or 'No summary excerpt available.'}\n\n"),
+        ("class:label", "Notes\n"),
+        ("", f"Tracker notes: {record.notes or '—'}\n"),
+        ("", f"Grade source: {record.jd_src} | Company: {record.company}\n\n"),
+    ]
+
+    lines.extend(
+        [
         ("class:label", "Actions\n"),
         ("", "e eval | c cv | o outreach | p apply | r reload\n"),
-        ("", "u evaluated | v cv_ready | a applied | k skipped\n"),
-        ("", "1-5 filters | up/down move | y/n confirm apply | q quit\n"),
-    ]
-    return lines
+        ("", "u evaluated | v cv_ready | a applied | x skipped\n"),
+        ("", "j/k move | h/l switch pane | m toggle MOCK | y/n confirm | ? help | q quit\n"),
+    ])
+    return _slice_lines(lines, state.detail_scroll)
 
 
 def render_header(state: DashboardState) -> list[tuple[str, str]]:
@@ -220,11 +537,42 @@ def render_header(state: DashboardState) -> list[tuple[str, str]]:
         style = "class:filter_active" if state.filter_name == name else "class:filter"
         parts.append((style, FILTER_LABELS[name]))
         parts.append(("", "  "))
+    mock_style = "class:filter_active" if state.show_mock else "class:filter"
+    mock_label = "M REAL+MOCK" if state.show_mock else "M REAL only"
+    parts.append((mock_style, mock_label))
     return parts
 
 
 def render_footer(state: DashboardState) -> list[tuple[str, str]]:
     return [("class:footer", state.message or "Ready.")]
+
+
+def render_key_hints(state: DashboardState) -> list[tuple[str, str]]:
+    return [("class:keybar", KEY_HINTS)]
+
+
+def render_pet(state: DashboardState) -> list[tuple[str, str]]:
+    width = max(0, shutil.get_terminal_size((100, 30)).columns)
+    return state.pet.render(width)
+
+
+def render_help() -> list[tuple[str, str]]:
+    lines = [
+        ("class:title", "Cockpit Help\n"),
+        ("", "Navigation\n"),
+        ("", "  j / down     move down in the Jobs list\n"),
+        ("", "  k / up       move up in the Jobs list\n"),
+        ("", "  h / left     focus Jobs ← Evaluation ← Details\n"),
+        ("", "  l / right    focus Jobs → Evaluation → Details\n"),
+        ("", "  m            toggle REAL-only vs REAL+MOCK\n"),
+        ("", "  pageup/down  jump Jobs, or scroll Evaluation/Details\n"),
+        ("", "  home / end   jump to first/last row\n\n"),
+        ("", "Actions\n"),
+        ("", "  e open eval   c open cv   o open outreach   p apply\n"),
+        ("", "  u evaluated   v cv_ready  a applied         x skipped\n"),
+        ("", "  1-5 filters   m toggle MOCK   r reload      q quit   ? close help\n"),
+    ]
+    return lines
 
 
 def open_path_in_terminal(path_text: str) -> None:
@@ -247,8 +595,12 @@ def open_path_in_terminal(path_text: str) -> None:
 def build_dashboard_app(state: DashboardState) -> Application:
     header_control = FormattedTextControl(lambda: render_header(state))
     table_control = FormattedTextControl(lambda: render_table(state), focusable=False)
+    evaluation_control = FormattedTextControl(lambda: render_evaluation(state), focusable=False)
     detail_control = FormattedTextControl(lambda: render_details(state), focusable=False)
+    keybar_control = FormattedTextControl(lambda: render_key_hints(state))
     footer_control = FormattedTextControl(lambda: render_footer(state))
+    pet_control = FormattedTextControl(lambda: render_pet(state))
+    help_control = FormattedTextControl(lambda: render_help())
 
     bindings = KeyBindings()
 
@@ -266,26 +618,67 @@ def build_dashboard_app(state: DashboardState) -> Application:
         state.move(1)
         event.app.invalidate()
 
+    @bindings.add("j")
+    def _vim_down(event) -> None:
+        state.move(1)
+        event.app.invalidate()
+
+    @bindings.add("k")
+    def _vim_up(event) -> None:
+        state.move(-1)
+        event.app.invalidate()
+
+    @bindings.add("h")
+    @bindings.add("left")
+    def _focus_left(event) -> None:
+        if state.help_visible:
+            return
+        state.switch_focus(-1)
+        event.app.invalidate()
+
+    @bindings.add("l")
+    @bindings.add("right")
+    def _focus_right(event) -> None:
+        if state.help_visible:
+            return
+        state.switch_focus(1)
+        event.app.invalidate()
+
     @bindings.add("pageup")
     def _page_up(event) -> None:
-        state.move(-VISIBLE_ROWS)
+        state.scroll_active_pane(-VISIBLE_ROWS)
         event.app.invalidate()
 
     @bindings.add("pagedown")
     def _page_down(event) -> None:
-        state.move(VISIBLE_ROWS)
+        state.scroll_active_pane(VISIBLE_ROWS)
         event.app.invalidate()
 
     @bindings.add("home")
     def _home(event) -> None:
         state.selected_index = 0
+        state.sync_pet_to_current_record()
         event.app.invalidate()
 
     @bindings.add("end")
     def _end(event) -> None:
-        state.selected_index = len(state.filtered_records) - 1
-        state._clamp_index()
+        if state.focus_pane == "jobs":
+            state.selected_index = len(state.filtered_records) - 1
+            state._clamp_index()
+            state.sync_pet_to_current_record()
         event.app.invalidate()
+
+    @bindings.add("?")
+    def _toggle_help(event) -> None:
+        state.toggle_help()
+        event.app.invalidate()
+
+    @bindings.add("escape")
+    def _close_help(event) -> None:
+        if state.help_visible:
+            state.help_visible = False
+            state.message = "Help overlay closed."
+            event.app.invalidate()
 
     for key, filter_name in zip(["1", "2", "3", "4", "5"], FILTER_OPTIONS):
         @bindings.add(key)
@@ -298,6 +691,12 @@ def build_dashboard_app(state: DashboardState) -> Application:
         state.reload()
         event.app.invalidate()
 
+    @bindings.add("m")
+    @bindings.add("M")
+    def _toggle_mock(event) -> None:
+        state.toggle_mock()
+        event.app.invalidate()
+
     @bindings.add("p")
     def _prompt_apply(event) -> None:
         state.request_apply()
@@ -308,16 +707,23 @@ def build_dashboard_app(state: DashboardState) -> Application:
         if not state.pending_apply_url:
             return
         record = state.current_record()
-        if record is None or record.url != state.pending_apply_url:
+        preflight = state.apply_preflight
+        if record is None or record.url != state.pending_apply_url or preflight is None:
             state.clear_apply_request()
             state.message = "Apply cancelled: selection changed."
             event.app.invalidate()
             return
-        state.message = f"Running apply.py for {record.company}..."
+        mode = "dry-run" if state.apply_dry_run else "live"
+        state.message = f"Running apply.py ({mode}) for {record.company}..."
         event.app.invalidate()
 
         def _run_apply() -> None:
-            result = run_apply_command(record.url, state.apply_dry_run)
+            result = run_apply_command(
+                record.url,
+                state.apply_dry_run,
+                cv_path=preflight.get("cv_path", ""),
+                job_key=preflight.get("job_key", ""),
+            )
             if result.returncode == 0:
                 if state.apply_dry_run:
                     state.message = f"apply.py dry-run completed for {record.company}"
@@ -378,17 +784,36 @@ def build_dashboard_app(state: DashboardState) -> Application:
         event.app.invalidate()
         run_in_terminal(lambda: open_path_in_terminal(record.outreach_path))
 
-    root_container = HSplit(
+    body_container = HSplit(
         [
             Window(content=header_control, height=1),
             VSplit(
                 [
                     Frame(Window(content=table_control, wrap_lines=False), title="Jobs", width=Dimension(weight=5)),
-                    Frame(Window(content=detail_control, wrap_lines=True), title="Details", width=Dimension(weight=6)),
+                    Frame(Window(content=evaluation_control, wrap_lines=True), title="Evaluation", width=Dimension(weight=4)),
+                    Frame(Window(content=detail_control, wrap_lines=True), title="Details", width=Dimension(weight=5)),
                 ]
             ),
+            Window(content=keybar_control, height=1),
             Window(content=footer_control, height=1),
+            Window(content=pet_control, height=3),
         ]
+    )
+
+    root_container = FloatContainer(
+        content=body_container,
+        floats=[
+            Float(
+                top=2,
+                left=4,
+                right=4,
+                bottom=4,
+                content=ConditionalContainer(
+                    content=Frame(Window(content=help_control, wrap_lines=True), title="Help"),
+                    filter=Condition(lambda: state.help_visible),
+                ),
+            )
+        ],
     )
 
     style = Style.from_dict(
@@ -396,11 +821,24 @@ def build_dashboard_app(state: DashboardState) -> Application:
             "title": "bold ansicyan",
             "header": "bold ansiyellow",
             "label": "bold ansigreen",
-            "muted": "ansibrightblack",
+            "muted": "#888888",
             "selected": "reverse",
-            "filter": "ansibrightblack",
+            "filter": "#888888",
             "filter_active": "bold ansiblue",
             "footer": "reverse",
+            "keybar": "reverse #ffffff",
+            "pane_active": "bold ansiblue",
+            "pane_inactive": "#888888",
+            "score": "bold ansiwhite",
+            "grade_a": "bold ansigreen",
+            "grade_b": "bold ansicyan",
+            "grade_c": "bold ansiyellow",
+            "grade_d": "bold ansired",
+            "grade_f": "bold ansired",
+            "pet": "#ffffff",
+            "pet_happy": "bold ansigreen",
+            "pet_warn": "bold ansiyellow",
+            "pet_floor": "#888888",
         }
     )
 
@@ -409,6 +847,7 @@ def build_dashboard_app(state: DashboardState) -> Application:
         key_bindings=bindings,
         full_screen=True,
         style=style,
+        refresh_interval=0.2,
     )
 
 
@@ -418,13 +857,14 @@ def main() -> None:
     parser.add_argument("--filter", default="all", choices=FILTER_OPTIONS)
     parser.add_argument("--print-startup", action="store_true", help="Print startup log before launching")
     parser.add_argument("--dump-row", type=int, default=None, metavar="INDEX", help="Print one row model and exit")
-    parser.add_argument("--apply-dry-run", action="store_true", help="Run apply.py --dry-run when pressing p")
+    parser.add_argument("--apply-dry-run", action="store_true", help="Run apply.py --dry-run when pressing p (default)")
+    parser.add_argument("--apply-live", action="store_true", help="Run live apply.py from the dashboard after confirmation")
     args = parser.parse_args()
 
     state = DashboardState(
         sort_by=args.sort,
         filter_name=args.filter,
-        apply_dry_run=args.apply_dry_run,
+        apply_dry_run=not args.apply_live,
     )
     if args.print_startup:
         print(startup_log(state))
@@ -438,7 +878,11 @@ def main() -> None:
         print(rows[index].to_json())
         return
 
-    state.message = "Keys: 1-5 filters | up/down move | e/c/o open files | p apply | u/v/a/k set status | q quit"
+    mode = "DRY-RUN" if state.apply_dry_run else "LIVE"
+    state.message = (
+        f"Keys: 1-5 filters | j/k or arrows move | h/l switch pane | "
+        f"pageup/down scroll panes | m toggle MOCK | p apply ({mode}) | u/v/a/x set status | q quit"
+    )
     app = build_dashboard_app(state)
     app.run()
 

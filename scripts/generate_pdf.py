@@ -4,7 +4,7 @@ Usage: python generate_pdf.py <eval_path>
 Example: python generate_pdf.py evals/deepmind_2026-04-01.md
 
 If the eval contains a real JD ([JD_SOURCE: REAL]), calls Claude Haiku to
-rewrite the canonical CV tailored to that job.
+rewrite a canonical CV built from profile/profile.yaml tailored to that job.
 If JD is mock, falls back to keyword injection.
 Always writes Markdown CV to applications/cv_{company}_{YYYYMMDD}.md and
 attempts to render applications/cv_{company}_{YYYYMMDD}.pdf via Playwright.
@@ -18,11 +18,16 @@ from datetime import date
 from pathlib import Path
 
 import markdown as md
+import yaml
+try:
+    from identity import build_job_key, record_artifact_identity
+except ImportError:  # pragma: no cover - module execution fallback
+    from scripts.identity import build_job_key, record_artifact_identity
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-CV_PATH = REPO_ROOT / "profile" / "cv.md"
+PROFILE_PATH = REPO_ROOT / "profile" / "profile.yaml"
 APPLICATIONS_DIR = REPO_ROOT / "applications"
 
 # ── API client setup (same pattern as evaluate.py) ────────────────────────────
@@ -96,9 +101,13 @@ def parse_eval(eval_path: Path) -> dict:
         jd_source = jd_match.group(2)
         jd_text = jd_match.group(3).strip()
 
+    url_match = re.search(r"\*\*URL:\*\*\s*([^\n|]+)", text)
+    url = url_match.group(1).strip() if url_match else ""
+
     return {
         "role": role,
         "company": company,
+        "url": url,
         "grade": grade,
         "score": score,
         "dim_scores": dim_scores,
@@ -111,8 +120,122 @@ def parse_eval(eval_path: Path) -> dict:
 
 # ── Step 2: Load base CV ──────────────────────────────────────────────────────
 
-def load_base_cv() -> str:
-    return CV_PATH.read_text(encoding="utf-8")
+def _compact_list(items: list[str], limit: int = 8) -> str:
+    picked = [str(item).strip() for item in items if str(item).strip()][:limit]
+    return ", ".join(picked)
+
+
+def _unique(items: list[str]) -> list[str]:
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for item in items:
+        text = str(item).strip()
+        if not text:
+            continue
+        key = text.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        ordered.append(text)
+    return ordered
+
+
+def load_profile_data() -> dict:
+    if not PROFILE_PATH.exists():
+        raise FileNotFoundError(f"Profile file not found: {PROFILE_PATH}")
+
+    profile = yaml.safe_load(PROFILE_PATH.read_text(encoding="utf-8")) or {}
+    if not isinstance(profile, dict):
+        raise ValueError(f"Invalid profile YAML: {PROFILE_PATH}")
+
+    identity = profile.get("identity", {}) or {}
+    if not identity.get("name"):
+        raise ValueError("profile/profile.yaml is missing identity.name")
+
+    verified_sections = (
+        profile.get("experience", []),
+        profile.get("education", []),
+        profile.get("projects", []),
+        (profile.get("tech_stack", {}) or {}).get("strong_skills", []),
+    )
+    if not any(section for section in verified_sections):
+        raise ValueError("profile/profile.yaml has no verified experience, education, projects, or skills")
+
+    return profile
+
+
+def build_canonical_cv(profile: dict) -> str:
+    identity = profile.get("identity", {}) or {}
+    contact = profile.get("contact", {}) or {}
+    tech = profile.get("tech_stack", {}) or {}
+
+    name = identity.get("name", "Renzo Rico").strip()
+    location = identity.get("location", "").strip()
+    contact_parts = [
+        location,
+        contact.get("email", "").strip(),
+        contact.get("phone", "").strip(),
+        contact.get("linkedin_url", "").strip(),
+    ]
+    meta_line = " | ".join(part for part in contact_parts if part)
+
+    experience_items = [str(item).strip() for item in profile.get("experience", []) if str(item).strip()]
+    education_items = [str(item).strip() for item in profile.get("education", []) if str(item).strip()]
+    project_items = [str(item).strip() for item in profile.get("projects", []) if str(item).strip()]
+    strong_skills = [str(item).strip() for item in tech.get("strong_skills", []) if str(item).strip()]
+    must_match = [str(item).strip() for item in tech.get("must_match_skills", []) if str(item).strip()]
+
+    summary_parts: list[str] = []
+    if location:
+        summary_parts.append(f"Data Scientist based in {location}.")
+    else:
+        summary_parts.append("Data Scientist.")
+    if experience_items:
+        summary_parts.append(f"Current work includes {experience_items[0]}.")
+    skill_summary = _compact_list(_unique(strong_skills[:4] + must_match), 6)
+    if skill_summary:
+        summary_parts.append(f"Core skills: {skill_summary}.")
+
+    lines = [f"# {name}"]
+    if meta_line:
+        lines.extend(["", meta_line])
+
+    lines.extend(["", "## Summary", " ".join(summary_parts).strip()])
+
+    if experience_items:
+        lines.extend(["", "## Experience"])
+        lines.extend(f"- {item}" for item in experience_items)
+
+    if project_items:
+        lines.extend(["", "## Projects"])
+        lines.extend(f"- {item}" for item in project_items)
+
+    if education_items:
+        lines.extend(["", "## Education"])
+        lines.extend(f"- {item}" for item in education_items)
+
+    skill_items = _unique(strong_skills or must_match)
+    if skill_items:
+        lines.extend(["", "## Skills"])
+        lines.extend(f"- {item}" for item in skill_items)
+
+    return "\n".join(lines).strip() + "\n"
+
+
+def build_profile_fact_block(profile: dict) -> str:
+    identity = profile.get("identity", {}) or {}
+    contact = profile.get("contact", {}) or {}
+    tech = profile.get("tech_stack", {}) or {}
+    lines = [
+        f"- name: {identity.get('name', '').strip()}",
+        f"- location: {identity.get('location', '').strip()}",
+        f"- contact: {_compact_list([contact.get('email', ''), contact.get('phone', ''), contact.get('linkedin_url', '')], 3) or 'n/a'}",
+        f"- experience: {_compact_list(profile.get('experience', []), 4) or 'n/a'}",
+        f"- education: {_compact_list(profile.get('education', []), 3) or 'n/a'}",
+        f"- projects: {_compact_list(profile.get('projects', []), 5) or 'n/a'}",
+        f"- skills: {_compact_list(tech.get('strong_skills', []), 8) or 'n/a'}",
+    ]
+    return "\n".join(lines)
 
 
 # ── Step 3a: Claude CV rewrite (REAL JD path) ────────────────────────────────
@@ -121,15 +244,21 @@ _CV_REWRITE_PROMPT = """\
 Rewrite the CV below tailored to the job description provided.
 
 Rules:
-- Keep all facts true — do not invent experience.
+- All factual content must come from the provided structured profile data and canonical CV.
+- You may reorder, rephrase, condense, and selectively omit items, but you may not invent any facts.
+- Never fabricate employers, clients, institutions, degrees, certifications, dates, locations, projects, or skills.
+- If a field is absent from the provided profile data, omit it; never guess.
 - Reorder bullets so the most relevant experience for this JD comes first.
 - Rewrite the Summary section (max 3 sentences) to emphasise fit for THIS specific role.
-- Keep the same sections as the original CV unless there is a strong reason to drop one.
+- Keep the same sections as the canonical CV unless there is a strong reason to drop one.
 - Inject important JD keywords naturally — no keyword stuffing.
 - Output a complete CV in GitHub-flavoured Markdown only. No preamble, no explanation.
 
 Candidate fit grade: {grade}
 Dimension scores: {scores_str}
+
+VERIFIED PROFILE FACTS:
+{profile_facts}
 
 ---
 JOB DESCRIPTION:
@@ -140,7 +269,7 @@ CANONICAL CV:
 {cv_text}"""
 
 
-def rewrite_cv_with_claude(parsed: dict, base_cv: str) -> str:
+def rewrite_cv_with_claude(parsed: dict, base_cv: str, profile_facts: str) -> str:
     scores_str = " | ".join(
         f"{k.replace('_', ' ').title()}: {v}"
         for k, v in parsed["dim_scores"].items()
@@ -148,6 +277,7 @@ def rewrite_cv_with_claude(parsed: dict, base_cv: str) -> str:
     prompt = _CV_REWRITE_PROMPT.format(
         grade=parsed["grade"],
         scores_str=scores_str or "N/A",
+        profile_facts=profile_facts,
         jd_text=parsed["jd_text"],
         cv_text=base_cv,
     )
@@ -170,7 +300,9 @@ def rewrite_cv_with_claude(parsed: dict, base_cv: str) -> str:
 
 def inject_keywords(cv: str, keywords: list[str]) -> str:
     kw_line = "**Key skills for this role:** " + ", ".join(keywords[:8])
-    return cv.replace("## Skills", f"## Skills\n{kw_line}\n")
+    if "## Skills" in cv:
+        return cv.replace("## Skills", f"## Skills\n{kw_line}\n", 1)
+    return cv.rstrip() + f"\n\n## Skills\n{kw_line}\n"
 
 
 # ── Step 4: Save tailored CV + render PDF ─────────────────────────────────────
@@ -187,19 +319,30 @@ def save_cv(
     cv: str,
     output_path: Path,
     company: str,
+    role: str,
+    url: str,
     grade: str,
     jd_source: str,
     interview_angle: str,
     eval_path: Path,
 ) -> Path:
     today = date.today().strftime("%Y%m%d")
+    job_key = build_job_key(url=url, company=company, title=role)
 
     header = (
         f"<!-- Tailored for: {company} | Grade: {grade} | JD: {jd_source} | "
         f"Source eval: {eval_path.name} | Generated: {today} -->\n"
+        f"<!-- Job key: {job_key} -->\n"
         f"<!-- Interview angle: {interview_angle} -->\n\n"
     )
     output_path.write_text(header + cv, encoding="utf-8")
+    record_artifact_identity(
+        output_path,
+        url=url,
+        company=company,
+        title=role,
+        source_eval=eval_path.name,
+    )
     return output_path
 
 
@@ -411,12 +554,14 @@ def generate_pdf(eval_path: "Path | str") -> str:
         raise FileNotFoundError(f"Eval file not found: {eval_path}")
 
     parsed = parse_eval(eval_path)
-    base_cv = load_base_cv()
+    profile = load_profile_data()
+    base_cv = build_canonical_cv(profile)
+    profile_facts = build_profile_fact_block(profile)
 
     print(f"CV_REWRITE company={parsed['company']} grade={parsed['grade']} jd_source={parsed['jd_source']}")
 
     if parsed["jd_source"] == "REAL" and parsed["jd_text"]:
-        tailored_cv = rewrite_cv_with_claude(parsed, base_cv)
+        tailored_cv = rewrite_cv_with_claude(parsed, base_cv, profile_facts)
     else:
         if parsed["jd_source"] != "REAL":
             print("[WARN] JD_SOURCE is MOCK — Claude rewrite skipped, using keyword injection")
@@ -429,6 +574,8 @@ def generate_pdf(eval_path: "Path | str") -> str:
         tailored_cv,
         markdown_path,
         parsed["company"],
+        parsed["role"],
+        parsed["url"],
         parsed["grade"],
         parsed["jd_source"],
         parsed["interview_angle"],
@@ -439,6 +586,13 @@ def generate_pdf(eval_path: "Path | str") -> str:
     try:
         html_content = render_cv_html(tailored_cv, parsed["company"], parsed["role"])
         render_pdf(html_content, pdf_path)
+        record_artifact_identity(
+            pdf_path,
+            url=parsed["url"],
+            company=parsed["company"],
+            title=parsed["role"],
+            source_eval=eval_path.name,
+        )
         print(f"[CV] PDF saved: {pdf_path.relative_to(REPO_ROOT)}")
         return str(pdf_path.relative_to(REPO_ROOT))
     except Exception as exc:
@@ -455,7 +609,7 @@ def main() -> None:
 
     try:
         rel_path = generate_pdf(sys.argv[1])
-    except FileNotFoundError as e:
+    except (FileNotFoundError, ValueError) as e:
         print(f"Error: {e}")
         sys.exit(1)
 

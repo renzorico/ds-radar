@@ -31,7 +31,6 @@ from evaluate import (
 APPLICATIONS_DIR = REPO_ROOT / "applications"
 TRACKER          = REPO_ROOT / "tracker.tsv"
 PROFILE_PATH     = REPO_ROOT / "profile" / "profile.yaml"
-CV_PATH          = REPO_ROOT / "profile" / "cv.md"
 
 TRACKER_HEADER = ["date", "company", "role", "url", "grade", "score",
                   "status", "pdf_path", "notes"]
@@ -163,6 +162,19 @@ def find_tailored_cv(company: str) -> "Path | None":
         return md_candidates[0]
     print("[WARN] No tailored CV found — upload field will be skipped")
     return None
+
+
+def resolve_explicit_cv_path(path_text: str) -> "Path | None":
+    if not path_text:
+        return None
+    candidate = Path(path_text)
+    if not candidate.is_absolute():
+        candidate = REPO_ROOT / candidate
+    candidate = candidate.resolve()
+    if not candidate.exists():
+        print(f"[ERROR] Explicit CV path does not exist: {path_text}")
+        sys.exit(1)
+    return candidate
 
 
 def find_oferta_hooks(company: str) -> str:
@@ -408,6 +420,8 @@ def main() -> None:
     parser.add_argument("url", help="ATS job application URL")
     parser.add_argument("--dry-run", action="store_true",
                         help="Detect and show field mapping without filling or submitting")
+    parser.add_argument("--cv-path", default="", help="Explicit CV artifact path from dashboard preflight")
+    parser.add_argument("--job-key", default="", help="Optional job identity key for debug logging")
     args = parser.parse_args()
 
     url = args.url.strip()
@@ -419,8 +433,11 @@ def main() -> None:
     profile    = load_profile()
     eval_data  = get_eval_rich(url)
     company    = eval_data["company"]
-    cv_path    = find_tailored_cv(company)
+    cv_path    = resolve_explicit_cv_path(args.cv_path) or find_tailored_cv(company)
     hooks      = find_oferta_hooks(company)
+
+    if args.job_key:
+        print(f"[APPLY] job_key={args.job_key}")
 
     if eval_data["jd_source"] == "REAL" and eval_data["jd_text"]:
         cover = generate_cover_answer(eval_data, hooks)

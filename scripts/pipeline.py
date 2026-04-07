@@ -151,7 +151,7 @@ def main() -> None:
     print(f"  CVs generated:      {counts['pdfs']}")
     print(f"  Already in tracker: {counts['already_tracked']} (skipped)")
     print(sep)
-    print("  Next: fill profile/cv.md with your real CV")
+    print("  Next: keep profile/profile.yaml up to date with your real CV facts")
     print("        add ANTHROPIC_API_KEY to .env")
     print("        run python pipeline.py for real evaluations")
     print(f"{sep}\n")

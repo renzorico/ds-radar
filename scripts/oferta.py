@@ -13,6 +13,11 @@ import sys
 from datetime import date
 from pathlib import Path
 
+try:
+    from identity import record_artifact_identity
+except ImportError:  # pragma: no cover - module execution fallback
+    from scripts.identity import record_artifact_identity
+
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from evaluate import (
     extract_company_from_url, mock_extract_jd,
@@ -296,6 +301,12 @@ def write_deep_report(
 {analysis['interview_probability']}
 """
     output_path.write_text(report, encoding="utf-8")
+    record_artifact_identity(
+        output_path,
+        url=url,
+        company=jd["company"],
+        title=jd["title"],
+    )
     return output_path
 
 

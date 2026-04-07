@@ -1,6 +1,7 @@
 """
 ds-radar auto pipeline — weekly pass
 Usage: python scripts/auto_pipeline.py [options]
+       python scripts/auto_pipeline.py --batch-file urls.txt [options]
 
 Steps:
   1. Import from LinkedIn CSV   (unless --skip-linkedin)
@@ -8,13 +9,19 @@ Steps:
   3. Evaluate new URLs          (up to --limit-evals)
   4. Run oferta + contacto for grade >= min_grade AND jd_source=REAL
   5. Print compact run summary
+
+Batch mode:
+  - Processes URLs from a file with resumable local state.
+  - Retries failed items up to --max-retries.
+  - Never auto-applies.
 """
 
 import argparse
+import json
 import re
 import subprocess
 import sys
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -41,6 +48,145 @@ def _jd_source_from_eval(eval_path) -> str:
         return m.group(1) if m else "MOCK"
     except Exception:
         return "MOCK"
+
+
+def utc_timestamp() -> str:
+    return datetime.now().isoformat(timespec="seconds")
+
+
+def load_batch_urls(path: Path) -> list[str]:
+    urls: list[str] = []
+    seen: set[str] = set()
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        url = raw.strip()
+        if not url or url.startswith("#") or url in seen:
+            continue
+        seen.add(url)
+        urls.append(url)
+    return urls
+
+
+def load_batch_state(path: Path) -> dict:
+    if not path.exists():
+        return {"items": [], "updated_at": ""}
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def save_batch_state(path: Path, state: dict) -> None:
+    state["updated_at"] = utc_timestamp()
+    path.write_text(json.dumps(state, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+
+def upsert_batch_items(state: dict, urls: list[str], max_retries: int) -> dict:
+    items = state.setdefault("items", [])
+    items_by_url = {item["url"]: item for item in items}
+    for item in items:
+        if item.get("status") == "running":
+            item["status"] = "pending"
+            item["last_error"] = "Reset from running on resume."
+            item["updated_at"] = utc_timestamp()
+    for url in urls:
+        if url in items_by_url:
+            continue
+        item = {
+            "url": url,
+            "status": "pending",
+            "attempt_count": 0,
+            "last_error": "",
+            "updated_at": utc_timestamp(),
+            "eval_path": "",
+            "pdf_path": "",
+            "company": "",
+            "title": "",
+            "grade": "",
+            "jd_source": "",
+        }
+        items.append(item)
+        items_by_url[url] = item
+    state["max_retries"] = max_retries
+    return state
+
+
+def batch_counts(state: dict) -> dict[str, int]:
+    counts = {"pending": 0, "running": 0, "succeeded": 0, "failed": 0, "skipped": 0}
+    for item in state.get("items", []):
+        status = item.get("status", "pending")
+        counts[status] = counts.get(status, 0) + 1
+    return counts
+
+
+def summarize_batch(state: dict, path: Path) -> None:
+    counts = batch_counts(state)
+    print(
+        f"[BATCH] state={path} "
+        f"pending={counts['pending']} running={counts['running']} "
+        f"succeeded={counts['succeeded']} failed={counts['failed']} skipped={counts['skipped']}"
+    )
+
+
+def process_single_url(args, url: str, tracked_urls: set[str]) -> tuple[dict, int]:
+    today = date.today().isoformat()
+    if args.dry_run:
+        print(f"[DRY] would evaluate: {url[:80]}")
+        return {
+            "url": url,
+            "skipped": False,
+            "grade": "?",
+            "jd_source": "MOCK",
+            "_dry": True,
+            "pdf_path": "",
+        }, 0
+
+    result = evaluate_url(url)
+    grade = result.get("grade", "?")
+    jd_src = _jd_source_from_eval(result.get("eval_path", ""))
+    result["jd_source"] = jd_src
+
+    if result["skipped"]:
+        print(f"[AUTO] eval url={url[:70]} already_evaluated=true")
+        result["pdf_path"] = ""
+        return result, 0
+
+    if result.get("sponsorship", {}).get("status") == "negative":
+        print(f"[AUTO] sponsorship_gate=FAIL url={url[:70]} — skipping downstream")
+        append_tracker_row({
+            "date": today, "company": result.get("company", "?"),
+            "role": result.get("title", ""), "url": url,
+            "grade": "F", "score": str(result.get("overall_score", 0.0)),
+            "status": "sponsorship_fail", "pdf_path": "",
+            "notes": result.get("sponsorship", {}).get("reason", ""),
+        })
+        tracked_urls.add(url)
+        result["pdf_path"] = ""
+        return result, 0
+
+    score = result.get("overall_score", 0.0)
+    pdf_path = ""
+    cvs_written = 0
+
+    if grade_meets(grade, args.min_grade):
+        ep = result.get("eval_path")
+        if ep:
+            try:
+                pdf_path = generate_pdf(ep)
+                cvs_written += 1
+            except Exception as exc:
+                print(f"[WARN] generate_pdf: {exc}")
+
+    if url not in tracked_urls:
+        status = "cv_ready" if pdf_path else "evaluated"
+        append_tracker_row({
+            "date": today, "company": result.get("company", "?"),
+            "role": result.get("title", ""), "url": url,
+            "grade": grade, "score": str(score),
+            "status": status, "pdf_path": pdf_path, "notes": jd_src,
+        })
+        tracked_urls.add(url)
+
+    result["pdf_path"] = pdf_path
+    cv_flag = "yes" if pdf_path else "no"
+    print(f"[AUTO] eval url={url[:70]} grade={grade} jd_source={jd_src} cv={cv_flag}")
+    return result, cvs_written
 
 
 # ── Phase 1: LinkedIn ─────────────────────────────────────────────────────────
@@ -108,63 +254,8 @@ def phase_evaluate(
     cvs_written = 0
 
     for url in capped:
-        if args.dry_run:
-            print(f"[DRY] would evaluate: {url[:80]}")
-            results.append({"url": url, "skipped": False, "grade": "?",
-                             "jd_source": "MOCK", "_dry": True})
-            continue
-
-        result = evaluate_url(url)
-        grade    = result.get("grade", "?")
-        jd_src   = _jd_source_from_eval(result.get("eval_path", ""))
-        result["jd_source"] = jd_src
-
-        if result["skipped"]:
-            print(f"[AUTO] eval url={url[:70]} already_evaluated=true")
-            results.append(result)
-            continue
-
-        # Hard sponsorship gate — skip CV/oferta/contacto regardless of grade
-        if result.get("sponsorship", {}).get("status") == "negative":
-            print(f"[AUTO] sponsorship_gate=FAIL url={url[:70]} — skipping downstream")
-            append_tracker_row({
-                "date": today, "company": result.get("company", "?"),
-                "role": result.get("title", ""), "url": url,
-                "grade": "F", "score": str(result.get("overall_score", 0.0)),
-                "status": "sponsorship_fail", "pdf_path": "",
-                "notes": result.get("sponsorship", {}).get("reason", ""),
-            })
-            tracked_urls.add(url)
-            results.append(result)
-            continue
-
-        score    = result.get("overall_score", 0.0)
-        pdf_path = ""
-        cv_flag  = "no"
-
-        if grade_meets(grade, args.min_grade):
-            ep = result.get("eval_path")
-            if ep:
-                try:
-                    pdf_path = generate_pdf(ep)
-                    cv_flag  = "yes"
-                    cvs_written += 1
-                except Exception as exc:
-                    print(f"[WARN] generate_pdf: {exc}")
-
-        if url not in tracked_urls:
-            status = "cv_ready" if pdf_path else "evaluated"
-            append_tracker_row({
-                "date": today, "company": result.get("company", "?"),
-                "role": result.get("title", ""), "url": url,
-                "grade": grade, "score": str(score),
-                "status": status, "pdf_path": pdf_path, "notes": jd_src,
-            })
-            tracked_urls.add(url)
-
-        result["pdf_path"] = pdf_path
-        print(f"[AUTO] eval url={url[:70]} grade={grade} "
-              f"jd_source={jd_src} cv={cv_flag}")
+        result, written = process_single_url(args, url, tracked_urls)
+        cvs_written += written
         results.append(result)
 
     return results, cvs_written
@@ -211,6 +302,86 @@ def phase_oferta_contacto(args, results: list[dict]) -> tuple[int, int, float]:
     return briefs, outreach, total_cost
 
 
+def run_batch_mode(args, tracked_urls: set[str]) -> None:
+    batch_file = Path(args.batch_file)
+    if not batch_file.exists():
+        print(f"[BATCH] batch file not found: {batch_file}")
+        sys.exit(1)
+
+    state_path = Path(args.batch_state) if args.batch_state else batch_file.with_suffix(".state.json")
+    urls = load_batch_urls(batch_file)
+    state = upsert_batch_items(load_batch_state(state_path), urls, args.max_retries)
+    save_batch_state(state_path, state)
+    summarize_batch(state, state_path)
+
+    if args.dry_run:
+        pending_urls = [
+            item["url"] for item in state["items"]
+            if item["status"] in {"pending", "failed", "running"}
+            and item.get("attempt_count", 0) < args.max_retries
+        ]
+        capped = pending_urls[:args.limit_evals] if args.limit_evals else pending_urls
+        for url in capped:
+            print(f"[DRY] batch would process: {url}")
+        print(f"[BATCH] dry-run eligible={len(capped)} state={state_path}")
+        return
+
+    processed = 0
+    briefs = 0
+    outreach = 0
+    brief_cost = 0.0
+
+    for item in state["items"]:
+        status = item.get("status", "pending")
+        attempts = item.get("attempt_count", 0)
+        if status in {"succeeded", "skipped"}:
+            continue
+        if status == "failed" and attempts >= args.max_retries:
+            continue
+        if args.limit_evals and processed >= args.limit_evals:
+            break
+
+        item["status"] = "running"
+        item["attempt_count"] = attempts + 1
+        item["last_error"] = ""
+        item["updated_at"] = utc_timestamp()
+        save_batch_state(state_path, state)
+
+        try:
+            result, written = process_single_url(args, item["url"], tracked_urls)
+            item["company"] = result.get("company", "")
+            item["title"] = result.get("title", "")
+            item["grade"] = result.get("grade", "")
+            item["jd_source"] = result.get("jd_source", "")
+            eval_path = result.get("eval_path")
+            item["eval_path"] = str(eval_path) if eval_path else ""
+            item["pdf_path"] = result.get("pdf_path", "")
+
+            if result.get("skipped"):
+                item["status"] = "skipped"
+            else:
+                item["status"] = "succeeded"
+                brief_add, outreach_add, cost_add = phase_oferta_contacto(args, [result])
+                briefs += brief_add
+                outreach += outreach_add
+                brief_cost += cost_add
+            item["last_error"] = ""
+        except Exception as exc:
+            item["status"] = "failed"
+            item["last_error"] = repr(exc)
+            print(f"[BATCH] failed url={item['url'][:80]} error={exc}")
+        item["updated_at"] = utc_timestamp()
+        save_batch_state(state_path, state)
+        processed += 1
+
+    summarize_batch(state, state_path)
+    print(
+        f"[BATCH] done processed={processed} "
+        f"oferta={briefs} contacto={outreach} cost_estimate=~${brief_cost:.4f} "
+        f"state={state_path}"
+    )
+
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main() -> None:
@@ -223,6 +394,12 @@ def main() -> None:
                         help="Max URLs to evaluate this run")
     parser.add_argument("--dry-run", action="store_true",
                         help="No writes — log what would happen")
+    parser.add_argument("--batch-file", default=None,
+                        help="Process URLs from this file using resumable batch state")
+    parser.add_argument("--batch-state", default=None,
+                        help="Path to batch state JSON (default: <batch-file>.state.json)")
+    parser.add_argument("--max-retries", type=int, default=2, metavar="N",
+                        help="Retry failed batch items up to N times (default: 2)")
     args = parser.parse_args()
 
     if args.dry_run:
@@ -231,6 +408,10 @@ def main() -> None:
     # Shared state
     seen_urls    = {r["url"] for r in read_scan_history() if r.get("url")}
     tracked_urls = load_tracked_urls()
+
+    if args.batch_file:
+        run_batch_mode(args, tracked_urls)
+        return
 
     # ── Phase 1 ──
     linkedin_kept, linkedin_urls = phase_linkedin(args)

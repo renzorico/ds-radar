@@ -14,6 +14,11 @@ import sys
 from datetime import date
 from pathlib import Path
 
+try:
+    from identity import record_artifact_identity
+except ImportError:  # pragma: no cover - module execution fallback
+    from scripts.identity import record_artifact_identity
+
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from evaluate import (
     extract_company_from_url,
@@ -308,6 +313,12 @@ def write_outreach_report(
 {messages['value_first']}
 """
     output_path.write_text(report, encoding="utf-8")
+    record_artifact_identity(
+        output_path,
+        url=url,
+        company=company,
+        title=title,
+    )
     return output_path
 
 
