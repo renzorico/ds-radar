@@ -7,7 +7,9 @@ No API calls, no Playwright. Import logic from evaluate.py and generate_pdf.py.
 """
 
 import csv
+import json
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 from pathlib import Path
 
@@ -22,11 +24,37 @@ from generate_pdf import generate_pdf
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SCAN_QUEUE = REPO_ROOT / "scan-queue.txt"
 TRACKER = REPO_ROOT / "tracker.tsv"
+STATE_FILE = REPO_ROOT / "scan-queue.state.json"
 
 TRACKER_HEADER = ["date", "company", "role", "url", "grade", "score",
                   "status", "pdf_path", "notes"]
 
 APPLY_GRADES = {"A", "B"}
+
+CANONICAL_STATUSES = {
+    "applied", "skipped", "cv_ready", "evaluated",
+    "sponsorship_fail", "seniority_fail", "pending", "interviewing",
+}
+
+_STATUS_ALIASES: dict[str, str] = {
+    "sponsorship_fail": "sponsorship_fail", "sponsor_fail": "sponsorship_fail", "no_sponsor": "sponsorship_fail",
+    "seniority_fail": "seniority_fail",     "senior_fail": "seniority_fail",    "too_senior": "seniority_fail",
+    "cv_ready": "cv_ready",                 "cv ready": "cv_ready",             "ready": "cv_ready",
+    "evaluated": "evaluated",               "eval": "evaluated",                "scored": "evaluated",
+    "applied": "applied",                   "sent": "applied",                  "submitted": "applied",
+    "skipped": "skipped",                   "skip": "skipped",                  "rejected": "skipped",
+    "ignored": "skipped",
+}
+
+
+def normalize_status(status: str) -> str:
+    """Map raw/legacy status strings to a canonical value. Falls back to 'skipped'."""
+    clean = status.strip().lower()
+    canonical = _STATUS_ALIASES.get(clean)
+    if canonical is None:
+        print(f"[WARN] Unknown status '{status}' — normalizing to 'skipped'")
+        return "skipped"
+    return canonical
 
 
 # ── Tracker helpers ───────────────────────────────────────────────────────────
@@ -45,7 +73,33 @@ def append_tracker_row(row: dict) -> None:
         writer = csv.DictWriter(f, fieldnames=TRACKER_HEADER, delimiter="\t")
         if write_header:
             writer.writeheader()
-        writer.writerow(row)
+        writer.writerow({**row, "status": normalize_status(row.get("status", "skipped"))})
+
+
+# ── Batch state helpers (compatible with auto_pipeline.py schema) ─────────────
+
+def _load_state() -> dict[str, str]:
+    """Return url → status mapping from STATE_FILE (auto_pipeline list-of-dicts schema)."""
+    if not STATE_FILE.exists():
+        return {}
+    raw = json.loads(STATE_FILE.read_text(encoding="utf-8"))
+    return {item["url"]: item.get("status", "pending") for item in raw.get("items", [])}
+
+
+def _save_state(url_status: dict[str, str]) -> None:
+    """Merge url_status into STATE_FILE preserving all existing fields."""
+    raw: dict = {}
+    if STATE_FILE.exists():
+        raw = json.loads(STATE_FILE.read_text(encoding="utf-8"))
+    items_by_url = {item["url"]: item for item in raw.get("items", [])}
+    for url, status in url_status.items():
+        if url in items_by_url:
+            items_by_url[url]["status"] = status
+        else:
+            items_by_url[url] = {"url": url, "status": status}
+    raw["items"] = list(items_by_url.values())
+    raw["updated_at"] = date.today().isoformat()
+    STATE_FILE.write_text(json.dumps(raw, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
@@ -61,32 +115,67 @@ def main() -> None:
         print("[PIPELINE] scan-queue.txt is empty. Run scan.py first.")
         sys.exit(0)
 
+    # Parse --parallel N (default 1)
+    parallel = 1
+    if "--parallel" in sys.argv:
+        idx = sys.argv.index("--parallel")
+        try:
+            parallel = max(1, int(sys.argv[idx + 1]))
+        except (IndexError, ValueError):
+            print("[PIPELINE] --parallel requires an integer argument")
+            sys.exit(1)
+
+    resume = "--resume" in sys.argv
+    retry_failed = "--retry-failed" in sys.argv
+
+    # Apply resume filter
+    if resume:
+        state = _load_state()
+        skip_statuses = {"succeeded"}
+        if not retry_failed:
+            skip_statuses.add("failed")
+        skipped = [u for u in urls if state.get(u) in skip_statuses]
+        urls = [u for u in urls if state.get(u) not in skip_statuses]
+        if skipped:
+            print(f"[RESUME] Skipping {len(skipped)} already-succeeded URLs")
+        if not urls:
+            print("[RESUME] All URLs already processed. Nothing to do.")
+            sys.exit(0)
+
     total = len(urls)
     print(f"\n[PIPELINE] Found {total} URLs to process\n")
+    if parallel > 1:
+        print(f"[PARALLEL] Running {parallel} workers\n")
 
     tracked_urls = load_tracked_urls()
     today = date.today().isoformat()
 
     # Counters
     counts = {"A": 0, "B": 0, "cdf": 0, "pdfs": 0, "already_tracked": 0, "eval_skipped": 0}
-    results = []
 
-    # Step 2 — evaluate each URL
-    for i, url in enumerate(urls, 1):
-        result = evaluate_url(url)
-        company = result.get("company", "?")
-
-        if result["skipped"]:
-            # Already in scan-history — still check tracker
-            counts["eval_skipped"] += 1
-            print(f"  [{i}/{total}] {company} — already evaluated, skipping")
+    # Step 2 — evaluate URLs (sequential or parallel)
+    pending_state: dict[str, str] = {}
+    if parallel > 1:
+        with ThreadPoolExecutor(max_workers=parallel) as executor:
+            results = list(executor.map(evaluate_url, urls))
+        for result in results:
+            pending_state[result["url"]] = "succeeded" if not result.get("skipped") else "skipped"
+        _save_state(pending_state)
+    else:
+        results = []
+        for i, url in enumerate(urls, 1):
+            result = evaluate_url(url)
+            company = result.get("company", "?")
+            if result["skipped"]:
+                counts["eval_skipped"] += 1
+                print(f"  [{i}/{total}] {company} — already evaluated, skipping")
+            else:
+                grade = result.get("grade", "?")
+                score = result.get("overall_score", "?")
+                print(f"  [{i}/{total}] Evaluating {company}... → {grade} ({score}/5.0)")
+            pending_state[url] = "succeeded" if not result.get("skipped") else "skipped"
+            _save_state(pending_state)
             results.append(result)
-            continue
-
-        grade = result.get("grade", "?")
-        score = result.get("overall_score", "?")
-        print(f"  [{i}/{total}] Evaluating {company}... → {grade} ({score}/5.0)")
-        results.append(result)
 
     # Step 3 — generate PDFs for B+ grades, Step 4 — update tracker
     print()

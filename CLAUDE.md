@@ -1,18 +1,34 @@
-# ds-radar
-AI job search pipeline for DS/Analytics roles.
+# ds-radar — Claude instructions
+AI job search pipeline for DS/Analytics roles (London-focused, Renzo Rico).
 
-## Modes
-- skills/scanner.md — discover job offers from target URLs
-- skills/evaluator.md — score a single offer (10 dimensions, A–F grade)
-- skills/pipeline.md — orchestrate: evaluate → pdf → track
-- skills/pdf.md — generate ATS-optimised CV tailored per offer
-- skills/tracker.md — append/update row in tracker.tsv
-- skills/apply.md — Playwright form-filler for ATS portals
-- scripts/oferta.py — deep 6-block strategic brief for one offer
-- scripts/contacto.py — generate 3 LinkedIn outreach message variants
+## What this repo does
+- Scan target ATS boards for DS/Analytics/ML roles
+- Score offers on 10 dimensions (0–5 → A–F)
+- Generate tailored CV + outreach
+- Track pipeline in TSV files
 
-## Rules
-- Always read the relevant skills/ file before starting any task
-- Never read evals/ or applications/ unless explicitly asked
-- One mode per session — do not touch unrelated files
-- Run /compact when context reaches ~70% capacity
+## Files Claude should care about
+- scripts/: scan.py, evaluate.py, pipeline.py, generate_pdf.py, oferta.py, contacto.py
+- skills/: one SKILL.md per mode (scanner, evaluator, pipeline, pdf, tracker, apply)
+- profile/: cv.md, profile.yaml, target-companies.yaml
+- state files: scan-queue.txt, scan-history.tsv, tracker.tsv
+- outputs: evals/, applications/
+
+## Modes (one per session)
+- /scanner   → use skills/scanner.md to discover & enqueue new roles
+- /evaluator → use skills/evaluator.md to score ONE URL (10 dims, A–F)
+- /pipeline  → use skills/pipeline.md to chain: queue → evaluate → pdf → tracker
+- /pdf       → use skills/pdf.md to improve CV tailoring & PDF generation
+- /tracker   → use skills/tracker.md to maintain tracker.tsv
+- /apply     → use skills/apply.md to automate ATS forms
+- /oferta    → scripts/oferta.py for deep 6-block brief of ONE offer
+- /contacto  → scripts/contacto.py for 3 LinkedIn outreach variants
+
+## Rules of engagement
+- Before coding in a mode, skim its SKILL.md and existing script(s)
+- Treat `evaluate_url()` + `parse_eval_file()` as the single scoring API
+- Do NOT touch evals/ or applications/ unless I explicitly ask
+- Preserve TSV schemas for scan-history.tsv and tracker.tsv
+- Favour small, testable changes over big refactors
+- Keep prompts and new skills compact; avoid repetition and boilerplate
+- When context feels ~70% full, propose a /compact plan instead of repeating history

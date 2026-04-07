@@ -61,14 +61,84 @@ def log_error(company_name: str, url: str, error: str) -> None:
         f.write(f"[{ts}] SCAN ERROR — {company_name} ({url}): {error}\n")
 
 
+def check_liveness(url: str) -> "str | None":
+    """GET the URL; return None if live, or a short failure reason string.
+
+    'Live' means: HTTP status < 400 and the first 600 bytes decode to at least
+    300 characters (a minimal signal that a real page was served, not an error
+    page or empty response).
+    """
+    import urllib.request as _ureq
+    try:
+        req = _ureq.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with _ureq.urlopen(req, timeout=6) as resp:
+            if resp.status >= 400:
+                return f"http status {resp.status}"
+            chunk = resp.read(600).decode("utf-8", errors="ignore")
+            if len(chunk) < 300:
+                return "body too short"
+            return None
+    except Exception as exc:
+        return f"request exception: {exc}"
+
+
 # ── Greenhouse scraper ────────────────────────────────────────────────────────
 
+def _infer_greenhouse_token(url: str) -> "str | None":
+    """Extract the board token from a Greenhouse URL, e.g. 'monzo' from boards.greenhouse.io/monzo."""
+    m = re.search(r"greenhouse\.io/([^/?#]+)", url)
+    return m.group(1).rstrip("/") if m else None
+
+
+def discover_jobs_greenhouse_api(company: dict) -> "list[str] | None":
+    """Fetch job listings via the Greenhouse JSON API.
+
+    Returns a list of job URLs on success, or None if the token is unavailable
+    or the request fails.
+    """
+    import urllib.request as _ureq
+    import json as _json
+
+    token = company.get("greenhouse_token") or _infer_greenhouse_token(company.get("url", ""))
+    if not token:
+        return None
+
+    api_url = f"https://boards-api.greenhouse.io/v1/boards/{token}/jobs?content=true"
+    try:
+        req = _ureq.Request(api_url, headers={"User-Agent": "Mozilla/5.0"})
+        with _ureq.urlopen(req, timeout=10) as resp:
+            data = _json.loads(resp.read().decode("utf-8"))
+        jobs = data.get("jobs", [])
+        urls: list[str] = []
+        seen: set[str] = set()
+        for job in jobs:
+            url = job.get("absolute_url") or ""
+            if url and re.search(r"/jobs/\d+", url) and url not in seen:
+                seen.add(url)
+                urls.append(url)
+        return urls
+    except Exception:
+        return None
+
+
 def discover_jobs_greenhouse(company: dict) -> list[str]:
-    """Scrape live job listings from a Greenhouse board using Playwright."""
+    """Scrape live job listings from a Greenhouse board.
+
+    Tries the Greenhouse JSON API first; falls back to Playwright scraping.
+    """
+    name = company["name"]
+
+    api_results = discover_jobs_greenhouse_api(company)
+    if api_results:
+        print(f"  [API] {name}: {len(api_results)} jobs via Greenhouse API")
+        return api_results
+    if api_results is not None:
+        print(f"  [API] {name}: API returned empty — falling back to scraper")
+    # else: None means token missing or request failed — go straight to scraper
+
     from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
 
     board_url = company["url"].rstrip("/")
-    name = company["name"]
 
     try:
         with sync_playwright() as p:
@@ -143,15 +213,28 @@ def main() -> None:
         rows.append((company["name"], len(discovered), len(new_urls), already_seen))
         print(f"→ {len(discovered)} found, {len(new_urls)} new, {already_seen} already seen")
 
-    print(f"\n[SCAN] Total: {len(all_new_urls)} new URLs queued")
+    print(f"\n[SCAN] Total: {len(all_new_urls)} new URLs before liveness check")
+
+    live_urls: list[str] = []
+    for url in all_new_urls:
+        if "mock" in url or "example.com" in url:
+            live_urls.append(url)
+            continue
+        reason = check_liveness(url)
+        if reason is None:
+            live_urls.append(url)
+        else:
+            log_error("liveness", url, reason)
+
+    print(f"[LIVENESS] {len(live_urls)}/{len(all_new_urls)} URLs passed")
 
     # Write scan-queue.txt (overwrite each run)
     SCAN_QUEUE.write_text(
-        "\n".join(all_new_urls) + ("\n" if all_new_urls else ""),
+        "\n".join(live_urls) + ("\n" if live_urls else ""),
         encoding="utf-8",
     )
 
-    if all_new_urls:
+    if live_urls:
         print()
         print("Run: python evaluate.py <url>  OR  python pipeline.py to process all")
     print()

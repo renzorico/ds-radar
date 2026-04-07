@@ -40,3 +40,5 @@ web/.next/
 web/node_modules/
 web/package-lock.json
 web/next-env.d.ts
+.dashboard.state.json
+backup_*/

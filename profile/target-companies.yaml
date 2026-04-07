@@ -1,16 +1,67 @@
 companies:
+  # Existing core targets
   - name: DeepMind
-    url: https://boards.greenhouse.io/deepmind
-    notes: "AI research"
+    url: "https://boards.greenhouse.io/deepmind"
+    notes: "AI research; DS/ML roles, highly competitive"
+
   - name: Monzo
-    url: https://boards.greenhouse.io/monzo
-    notes: "Fintech DS"
+    url: "https://boards.greenhouse.io/monzo"
+    notes: "Fintech; strong DS, analytics, ML culture"
+
   - name: Revolut
-    url: https://jobs.lever.co/revolut
-    notes: "Growth analytics"
+    url: "https://jobs.lever.co/revolut"
+    notes: "Fintech; growth analytics & DS"
+
   - name: Deliveroo
-    url: https://boards.greenhouse.io/deliveroo
-    notes: "Marketplace DS"
+    url: "https://boards.greenhouse.io/deliveroo"
+    notes: "Marketplace; DS/ML, rider/logistics"
+
   - name: Spotify
-    url: https://boards.greenhouse.io/spotify
-    notes: "Music ML"
+    url: "https://boards.greenhouse.io/spotify"
+    notes: "Music ML / recommender systems"
+
+
+  # Fintech / product companies with strong data work
+  - name: Wise
+    url: "https://www.wise.jobs/roles"           # check for their ATS root
+    notes: "Fintech; heavy data & experimentation"
+
+  - name: Starling Bank
+    url: "https://www.starlingbank.com/careers/" # or their ATS URL
+    notes: "Fintech; DS/analytics roles in London"
+
+  - name: Zopa
+    url: "https://www.zopa.com/careers"          # confirm ATS link
+    notes: "Fintech; credit risk, analytics, DS roles"
+
+  - name: Octopus Energy
+    url: "https://jobs.lever.co/octoenergy"
+    notes: "Energy tech; analytics & ML; often UK roles with data sponsorship potential"  # [web:96]
+
+  - name: Cloudflare
+    url: "https://boards.greenhouse.io/cloudflare"
+    notes: "Global infra; London DS roles (e.g. FinTech data scientist); often open to sponsorship discussions"  # [web:93]
+
+
+  # Data / analytics heavy product companies
+  - name: Rightmove
+    url: "https://job-boards.eu.greenhouse.io/rightmovecareers"
+    notes: "Property portal; DS, data engineering, analytics roles"  # [web:96]
+
+  - name: GetGround
+    url: "https://boards.greenhouse.io/getground"
+    notes: "Fintech / property; has advertised analytics roles with visa sponsorship"  # [web:95]
+
+  - name: Salary Finance
+    url: "https://job-boards.eu.greenhouse.io/salaryfinance83"
+    notes: "Fintech; data scientist roles in UK"  # [web:89]
+
+
+  # High-upside ML/AI employers (harder but worth polling)
+  - name: Cloud native / AI infra (generic slot)
+    url: "https://boards.greenhouse.io/cloudflare"  # reuse; you may later replace with other AI infra companies
+    notes: "Placeholder for infra/AI infra orgs with DS/ML roles"
+
+  # You can keep one or two “wildcard” entries and refine over time:
+  # - a specific edtech you like (e.g. Multiverse)
+  # - a specific devtools / data tools company

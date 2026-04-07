@@ -118,17 +118,82 @@ def _load_profile() -> dict:
     try:
         import yaml
         data = yaml.safe_load(PROFILE_PATH.read_text(encoding="utf-8"))
+        tech = data.get("tech_stack", {})
         return {
             "archetypes": data["target_roles"]["archetypes"],
             "min_k": data["compensation"]["min_salary_gbp"] // 1000,
             "target_k": data["compensation"]["target_salary_gbp"] // 1000,
+            "experience": data.get("experience", []),
+            "projects": data.get("projects", []),
+            "skills": tech.get("strong_skills", []) + tech.get("must_match_skills", []),
         }
     except Exception:
         return {
             "archetypes": ["Data Scientist", "Analytics Engineer", "ML Engineer"],
             "min_k": 40,
             "target_k": 60,
+            "experience": [],
+            "projects": [],
+            "skills": [],
         }
+
+
+# ── STAR+R interview prep generator ──────────────────────────────────────────
+
+def generate_starrr(eval_data: dict, profile: dict) -> str:
+    """Generate 4 STAR+R interview stories mapped to JD requirements.
+
+    Returns a markdown string ready to write to disk.
+    """
+    keywords = ", ".join(eval_data.get("top_keywords") or [])
+    experience_text = "\n".join(f"- {e}" for e in (profile.get("experience") or [])[:4])
+    projects_text = "\n".join(f"- {p}" for p in (profile.get("projects") or [])[:5])
+    skills_text = ", ".join(str(s) for s in (profile.get("skills") or [])[:10])
+
+    prompt = f"""\
+You are a career coach helping Renzo Rico (Data Scientist, London) prepare for an interview.
+
+Role: {eval_data.get("title", "Unknown")} at {eval_data.get("company", "Unknown")}
+JD keywords / requirements: {keywords}
+Role summary: {eval_data.get("summary", "")[:400]}
+
+Candidate background:
+Experience:
+{experience_text}
+
+Key projects:
+{projects_text}
+
+Skills: {skills_text}
+
+Generate exactly 4 STAR+R interview stories. Each story must:
+- Map to a DISTINCT requirement from the JD keywords above
+- Follow this exact structure with these exact headings:
+  ### Story N: <one-line title linking the story to the JD requirement>
+  **Situation:** ...
+  **Task:** ...
+  **Action:** ...
+  **Result:** ...
+  **Reflection:** what you would do differently or what you learned
+
+Rules:
+- Be specific and concrete — cite real-sounding metrics or decisions
+- Do NOT invent experience not implied by the background above
+- Keep each story to 5–8 sentences total across all sections
+- Use plain English, active voice, no bullet points within sections
+- End with a one-line "Interview angle:" note on how to connect this story to the role
+"""
+
+    response = _client.messages.create(
+        model=MODEL,
+        max_tokens=1200,
+        system="You write concise, concrete interview preparation stories. Use the exact markdown structure requested.",
+        messages=[{"role": "user", "content": prompt}],
+    )
+    usage = response.usage
+    cost = (usage.input_tokens * 0.25 + usage.output_tokens * 1.25) / 1_000_000
+    print(f"[COST] starrr ~${cost:.5f} | {usage.input_tokens} in / {usage.output_tokens} out")
+    return response.content[0].text.strip()
 
 
 # ── Claude brief generator ────────────────────────────────────────────────────
@@ -313,14 +378,43 @@ def write_deep_report(
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main() -> None:
-    if len(sys.argv) != 2:
-        print("Usage: python oferta.py <job_url>")
-        sys.exit(1)
-
-    url = sys.argv[1].strip()
+    import argparse
+    parser = argparse.ArgumentParser(prog="oferta.py")
+    parser.add_argument("url", help="Job URL to analyse")
+    parser.add_argument("--interview", action="store_true",
+                        help="Generate 4 STAR+R interview stories instead of the deep brief")
+    args = parser.parse_args()
+    url = args.url.strip()
 
     eval_path = get_eval_path(url)
     parsed = parse_eval_deep(eval_path)
+
+    if args.interview:
+        profile = _load_profile()
+        md = generate_starrr(parsed, profile)
+        from evaluate import slugify
+        company_slug = slugify(parsed.get("company", "unknown"))
+        role_slug = slugify(parsed.get("title", "role"))
+        out_path = EVALS_DIR / f"interview_{company_slug}_{role_slug}.md"
+        out_path.write_text(md, encoding="utf-8")
+        print(f"Interview prep: {out_path.relative_to(REPO_ROOT)}")
+
+        # Append to cumulative story bank
+        story_bank_dir = REPO_ROOT / "interview-prep"
+        story_bank_dir.mkdir(exist_ok=True)
+        story_bank = story_bank_dir / "story-bank.md"
+        today = date.today().isoformat()
+        archetype = parsed.get("archetype", "ds-product")
+        entry = (
+            f"\n---\n\n"
+            f"## {parsed.get('company', 'Unknown')} — {parsed.get('title', 'Unknown')}\n"
+            f"**Date:** {today}  |  **Archetype:** {archetype}\n\n"
+            f"{md}\n"
+        )
+        with story_bank.open("a", encoding="utf-8") as f:
+            f.write(entry)
+        print(f"[STORY BANK] Appended to {story_bank.relative_to(REPO_ROOT)}")
+        return
 
     jd = {
         "title": parsed["title"],

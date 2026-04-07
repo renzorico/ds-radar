@@ -11,6 +11,7 @@ import os
 import re
 import csv
 import json
+import threading
 from datetime import date
 from pathlib import Path
 from urllib.parse import urlparse
@@ -130,15 +131,19 @@ def url_already_evaluated(url: str, history: list[dict]) -> dict | None:
     return None
 
 
+_SCAN_HISTORY_LOCK = threading.Lock()
+
+
 def append_scan_history(url: str, eval_path: Path) -> None:
     today = date.today().isoformat()
     rel_path = eval_path.relative_to(REPO_ROOT)
-    write_header = not SCAN_HISTORY.exists()
-    with SCAN_HISTORY.open("a", newline="") as f:
-        writer = csv.writer(f, delimiter="\t")
-        if write_header:
-            writer.writerow(SCAN_HISTORY_HEADER)
-        writer.writerow([url, today, str(rel_path)])
+    with _SCAN_HISTORY_LOCK:
+        write_header = not SCAN_HISTORY.exists()
+        with SCAN_HISTORY.open("a", newline="") as f:
+            writer = csv.writer(f, delimiter="\t")
+            if write_header:
+                writer.writerow(SCAN_HISTORY_HEADER)
+            writer.writerow([url, today, str(rel_path)])
 
 
 def load_profile() -> dict:
@@ -232,6 +237,123 @@ def detect_sponsorship_status(url: str, jd_text: str) -> dict:
         }
 
     return {"status": "neutral", "reason": "no sponsorship signal found", "evidence": ""}
+
+
+# ── Seniority detection patterns ─────────────────────────────────────────────
+
+_SENIOR_TITLE_PATTERNS = [
+    r"\bsenior\b",
+    r"\bsr\.",
+    r"\blead\b",
+    r"\bprincipal\b",
+    r"\bstaff\b",
+    r"\bhead\s+of\b",
+    r"\bdirector\b",
+    r"\bvp\b",
+    r"\bmanager\b",
+    r"\bowner\b",
+    r"\bchief\b",
+    r"\bc-level\b",
+]
+
+
+def detect_seniority_level(title: str, jd_text: str) -> dict:
+    """Detect if a role is too senior for a junior-to-mid candidate.
+
+    Returns {"status": "senior"|"ok", "reason": str}.
+    Checks title keywords first, then body for N+ years where N >= 5.
+    """
+    clean_title = re.sub(r"^\[JD_SOURCE: (?:REAL|MOCK)\]\n", "", title)
+    for pat in _SENIOR_TITLE_PATTERNS:
+        m = re.search(pat, clean_title, re.IGNORECASE)
+        if m:
+            return {
+                "status": "senior",
+                "reason": f"title contains senior signal: '{m.group()}'",
+            }
+
+    clean_body = re.sub(r"^\[JD_SOURCE: (?:REAL|MOCK)\]\n", "", jd_text)
+    for hit in re.findall(r"(\d+)\+\s*years?", clean_body, re.IGNORECASE):
+        if int(hit) >= 5:
+            return {
+                "status": "senior",
+                "reason": f"JD requires {hit}+ years experience",
+            }
+
+    return {"status": "ok", "reason": ""}
+
+
+# ── Role archetype detection ─────────────────────────────────────────────────
+
+_ARCHETYPE_KEYWORDS: dict[str, list[str]] = {
+    "ai-engineer":         ["llm", "generative ai", "rag", "langchain", "prompt", "agent",
+                            "fine-tuning", "embeddings", "openai", "anthropic", "claude"],
+    "ml-engineer":         ["model deployment", "mlops", "inference", "serving", "feature store",
+                            "training infrastructure", "pytorch", "tensorflow", "model monitoring"],
+    "data-engineer":       ["etl", "airflow", "spark", "kafka", "bigquery", "data platform",
+                            "ingestion", "orchestration", "warehouse"],
+    "analytics-engineer":  ["dbt", "data warehouse", "sql", "looker", "tableau", "power bi",
+                            "analytical", "reporting", "metrics layer"],
+    "ds-product":          ["product", "growth", "experimentation", "a/b test", "metrics",
+                            "analytics", "insight", "dashboard", "stakeholder"],
+}
+
+
+def detect_archetype(title: str, jd_text: str) -> str:
+    """Keyword-based archetype classifier. No API call.
+
+    Returns one of: ds-product, ml-engineer, analytics-engineer, data-engineer, ai-engineer.
+    Tie-break and default: ds-product.
+    """
+    haystack = (title + " " + jd_text).lower()
+    scores = {arch: sum(1 for kw in kws if kw in haystack)
+              for arch, kws in _ARCHETYPE_KEYWORDS.items()}
+    best_score = max(scores.values())
+    if best_score == 0:
+        return "ds-product"
+    # Priority order for tie-breaking (ds-product wins)
+    for arch in ("ds-product", "ai-engineer", "ml-engineer", "analytics-engineer", "data-engineer"):
+        if scores[arch] == best_score:
+            return arch
+    return "ds-product"
+
+
+# ── Compensation benchmarking ────────────────────────────────────────────────
+
+def _has_salary_in_jd(jd: dict) -> bool:
+    """Return True if the JD already contains an explicit salary figure."""
+    text = jd.get("description", "") + " " + jd.get("salary", "")
+    return bool(re.search(r"£\s*[\d,]+", text))
+
+
+def _fetch_comp_benchmark_if_useful(jd: dict) -> str:
+    """Return a short market-rate string for the compensation prompt context, or ''.
+
+    Skips when: salary already present in JD, source is MOCK, or fetch fails.
+    """
+    desc = jd.get("description", "")
+    if "[JD_SOURCE: MOCK]" in desc or _has_salary_in_jd(jd):
+        return ""
+    return _web_comp_lookup(jd.get("title", ""))
+
+
+def _web_comp_lookup(title: str) -> str:
+    """Scrape DuckDuckGo HTML for London salary signals. Returns compact string or ''."""
+    import urllib.request as _ureq
+    from urllib.parse import quote_plus
+    query = quote_plus(f'"{title}" salary London 2025')
+    url = f"https://html.duckduckgo.com/html/?q={query}"
+    try:
+        req = _ureq.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with _ureq.urlopen(req, timeout=6) as resp:
+            html = resp.read().decode("utf-8", errors="ignore")
+        hits = re.findall(r"£[\d,]+(?:k)?(?:\s*(?:to|–|-)\s*£[\d,]+(?:k)?)?", html)
+        if hits:
+            unique = list(dict.fromkeys(hits))[:4]
+            return f"Web salary signals for {title!r} in London: {', '.join(unique)}"
+    except Exception:
+        pass
+    return ""
 
 
 # ── JD extraction ────────────────────────────────────────────────────────────
@@ -442,7 +564,7 @@ def build_calibration_hints(calibration_rows: list[dict]) -> str:
     return "\n".join(lines)
 
 
-def build_score_prompt(jd: dict, lean_cv: str, profile_context: str, calibration_hints: str) -> str:
+def build_score_prompt(jd: dict, lean_cv: str, profile_context: str, calibration_hints: str, comp_context: str = "") -> str:
     jd_text = (
         f"Title: {jd['title']}\n"
         f"Company: {jd['company']}\n"
@@ -485,10 +607,10 @@ When you judge overall fit, explicitly consider the "learning surface" of the ro
   - Strong reliance on Excel or legacy tools, with limited access to raw data or modern tooling.
   - Minimal exposure to experimentation, modelling, or end-to-end ownership.
 
-Use this learning-surface judgment as a soft factor when assigning the final grade:
-- Strong learning surface should push roles up slightly (for example from a marginal C toward a stronger C/B) when seniority and sponsorship are acceptable.
+Use this learning-surface judgment as a soft factor when assigning the individual dimension scores:
+- Strong learning surface should push growth_trajectory and role_match scores up slightly when seniority and sponsorship are acceptable.
 - Medium learning surface is fine for "bridge" roles, especially if sponsorship and stability are present.
-- Weak learning surface should pull roles down unless there is some compensating factor (for example, excellent sponsorship plus brand plus a clear path to transition into a stronger data/ML track).
+- Weak learning surface should pull growth_trajectory down unless there is some compensating factor (for example, excellent sponsorship plus brand plus a clear path to a stronger data/ML track).
 
 Renzo long-term archetype (for context)
 
@@ -502,8 +624,11 @@ Keep the following in mind when judging overall fit:
 If the job description explicitly mentions that visa sponsorship is available or supports relocation/sponsorship to the UK, treat this as a positive factor in your overall judgment:
 
 - Do not let sponsorship alone override very poor fit (for example, non-technical roles), but
-- When the role is at least moderately technical with medium learning surface and acceptable seniority, lean slightly more positive in your grading, since sponsorship increases its practical value for Renzo.
-
+- When the role is at least moderately technical with medium learning surface and acceptable seniority, lean slightly more positive in your dimension scores, since sponsorship increases its practical value for Renzo.
+{f"""
+Market compensation context (use only to calibrate the compensation dimension score; if absent, treat compensation as uncertain rather than negative):
+{comp_context}
+""" if comp_context else ""}
 Respond ONLY with a single valid JSON object.
 
 Important:
@@ -534,9 +659,6 @@ Use this exact schema:
     "growth_trajectory": <0.0-5.0>,
     "timeline": <0.0-5.0>
   }},
-  "overall_score": <average of all 10 scores rounded to 1 decimal>,
-  "grade": "<A if >=4.5, B if >=3.8, C if >=3.0, D if >=2.0, F otherwise>",
-  "recommended": <true if overall_score>=3.8, else false>,
   "summary": "<A concise plain-text explanation of your reasoning, 3–6 sentences total. Use short sentences and paragraphs only. Do NOT use markdown syntax, including lists with '-', headings, or backticks. It is fine for this string to contain newlines, but it must still be valid JSON with proper quoting and escaping. Include a clearly marked plain-text sub-section starting with 'Bridge-role assessment: ...' that answers whether this would be a reasonable 12–24 month bridge role for Renzo and explain why or why not in 1–2 sentences within the overall 3–6 sentence limit.>",
   "top_keywords": ["<5-8 JD keywords relevant to this candidate>"],
   "interview_angle": "<Optional short note on how Renzo might pitch himself in an interview for this role, or null if not sure.>"
@@ -607,13 +729,13 @@ Your task now:
 
 # ── Real scorer ───────────────────────────────────────────────────────────────
 
-def real_score(jd: dict) -> dict:
+def real_score(jd: dict, comp_context: str = "") -> dict:
     """Call Claude Haiku to score a JD against the candidate profile."""
     lean_cv = build_lean_cv()
     profile = load_profile()
     profile_context = build_profile_context(profile)
     calibration_hints = build_calibration_hints(load_calibration_notes())
-    user_prompt = build_score_prompt(jd, lean_cv, profile_context, calibration_hints)
+    user_prompt = build_score_prompt(jd, lean_cv, profile_context, calibration_hints, comp_context)
     log_instruction_block(profile_context, calibration_hints)
     log_prompt_preview(user_prompt)
 
@@ -651,6 +773,18 @@ def real_score(jd: dict) -> dict:
             raise exc
 
     result["interview_angle"] = result.get("interview_angle")
+
+    # Apply weighted scoring (falls back to equal weights if profile is missing any key)
+    scores = result.get("scores", {})
+    weights = load_profile().get("scoring_weights", {})
+    _dims = list(scores.keys())
+    if not weights or set(weights.keys()) != set(_dims):
+        print(f"[WARN] scoring_weights missing or incomplete in profile.yaml — using equal weights")
+        weights = {d: 1 / len(_dims) for d in _dims}
+    result["overall_score"] = round(sum(scores[d] * weights[d] for d in _dims), 1)
+    grade = result["overall_score"]
+    result["grade"] = "A" if grade >= 4.5 else "B" if grade >= 4.0 else "C" if grade >= 3.0 else "D" if grade >= 2.0 else "F"
+    result["recommended"] = result["overall_score"] >= 4.0
 
     return result
 
@@ -707,6 +841,7 @@ def write_report(
     report = f"""\
 # {result['title']} @ {result['company']}
 **Grade:** {result['grade']} | **Score:** {result['overall_score']}/5.0 | **Recommended:** {recommended_str}{sponsor_flag}
+**Archetype:** {result.get('archetype', 'ds-product')}
 **URL:** {url}
 **Date:** {today}
 **Mode:** REAL (Claude Haiku)
@@ -763,46 +898,93 @@ def parse_eval_file(eval_path: Path) -> dict:
         "company": company,
         "grade": grade,
         "overall_score": overall_score,
-        "recommended": overall_score >= 3.8,
+        "recommended": overall_score >= 4.0,
     }
 
 
 # ── Public API ───────────────────────────────────────────────────────────────
 
-def evaluate_url(url: str) -> dict:
+def evaluate_url(url: str, force: bool = False) -> dict:
     """Evaluate a single job URL. Returns result dict with eval_path and skipped flag.
 
     Returns:
-        {"skipped": True, "url": url, ...existing_row}   — if already in scan-history
-        {"skipped": False, "url": url, "eval_path": Path, ...score_fields}  — if new
+        {"skipped": True, "url": url, ...existing_row}   — if already in scan-history (force=False)
+        {"skipped": False, "url": url, "eval_path": Path, ...score_fields}  — if new or force=True
     """
     url = url.strip()
 
-    # Step 1 — dedup check
+    # Step 1 — dedup check (bypassed when force=True)
     history = read_scan_history()
-    existing = url_already_evaluated(url, history)
-    if existing:
-        return {"skipped": True, "url": url, **existing}
+    if not force:
+        existing = url_already_evaluated(url, history)
+        if existing:
+            return {"skipped": True, "url": url, **existing}
 
     # Step 2 — JD extraction (real Playwright; mock fallback on failure)
     jd = extract_jd(url)
+
+    _ZERO_SCORES = {d: 0.0 for d in [
+        "role_match", "skills_alignment", "seniority", "compensation",
+        "interview_likelihood", "geography", "company_stage",
+        "product_interest", "growth_trajectory", "timeline",
+    ]}
 
     # Step 2.5 — sponsorship gate (deterministic, pre-LLM)
     sponsorship = detect_sponsorship_status(url, jd.get("description", ""))
     if sponsorship["status"] == "negative":
         print(f"[SPONSOR] GATE FAIL — {sponsorship['reason']} | {sponsorship['evidence']}")
+        result = {
+            "title": jd.get("title", "Unknown"),
+            "company": jd.get("company", "Unknown"),
+            "location": jd.get("location", ""),
+            "salary_visible": jd.get("salary"),
+            "scores": dict(_ZERO_SCORES),
+            "overall_score": 0.0,
+            "grade": "F",
+            "recommended": False,
+            "summary": f"[SPONSORSHIP GATE: FAIL] {sponsorship['reason']}.",
+            "top_keywords": [],
+            "interview_angle": None,
+        }
+        eval_path = write_report(result, url, jd=jd, sponsorship=sponsorship)
+        append_scan_history(url, eval_path)
+        return {"skipped": False, "url": url, "eval_path": eval_path,
+                "sponsorship": sponsorship, **result}
+
+    # Step 2.6 — seniority gate (deterministic, pre-LLM)
+    seniority = detect_seniority_level(jd.get("title", ""), jd.get("description", ""))
+    if seniority["status"] == "senior":
+        print(f"[SENIORITY] GATE FAIL — {seniority['reason']}")
+        result = {
+            "title": jd.get("title", "Unknown"),
+            "company": jd.get("company", "Unknown"),
+            "location": jd.get("location", ""),
+            "salary_visible": jd.get("salary"),
+            "scores": dict(_ZERO_SCORES),
+            "overall_score": 0.0,
+            "grade": "F",
+            "recommended": False,
+            "summary": f"[SENIORITY GATE: FAIL] {seniority['reason']}.",
+            "top_keywords": [],
+            "interview_angle": None,
+        }
+        eval_path = write_report(result, url, jd=jd, sponsorship=sponsorship)
+        append_scan_history(url, eval_path)
+        return {"skipped": False, "url": url, "eval_path": eval_path,
+                "sponsorship": sponsorship, **result}
+
+    # Step 2.7 — archetype detection (deterministic, pre-LLM)
+    archetype = detect_archetype(jd.get("title", ""), jd.get("description", ""))
+    print(f"[ARCHETYPE] {archetype}")
+
+    # Step 2.8 — optional compensation benchmark (pre-LLM, only for real JDs without salary)
+    comp_context = _fetch_comp_benchmark_if_useful(jd)
+    if comp_context:
+        print(f"[COMP] {comp_context[:80]}")
 
     # Step 3 — real API scoring
-    result = real_score(jd)
-
-    # Override grade/recommendation if sponsorship gate failed
-    if sponsorship["status"] == "negative":
-        result["grade"] = "F"
-        result["recommended"] = False
-        result["summary"] = (
-            f"[SPONSORSHIP GATE: FAIL] {sponsorship['reason']}. "
-            + result.get("summary", "")
-        )
+    result = real_score(jd, comp_context=comp_context)
+    result["archetype"] = archetype
 
     # Step 4 — save report (pass jd + sponsorship so sections are embedded)
     eval_path = write_report(result, url, jd=jd, sponsorship=sponsorship)
@@ -842,12 +1024,15 @@ def main() -> None:
         test_jd_extraction()
         sys.exit(0)
 
-    if len(sys.argv) != 2:
-        print("Usage: python evaluate.py <job_url>")
+    force = "--force" in sys.argv
+    args = [a for a in sys.argv[1:] if a != "--force"]
+
+    if len(args) != 1:
+        print("Usage: python evaluate.py <job_url> [--force]")
         print("       python evaluate.py --test-jd   (test JD extraction on scan-queue)")
         sys.exit(1)
 
-    result = evaluate_url(sys.argv[1])
+    result = evaluate_url(args[0], force=force)
 
     if result["skipped"]:
         print("Already evaluated. Skipping.")

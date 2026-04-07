@@ -46,6 +46,21 @@ _client = anthropic.Anthropic(api_key=_api_key)
 MODEL = "claude-haiku-4-5-20251001"
 CV_REWRITE_MAX_TOKENS = 1500
 
+# ── ATS Unicode normalisation ─────────────────────────────────────────────────
+
+def normalize_for_ats(text: str) -> str:
+    """Replace typographic characters with ASCII equivalents for ATS compatibility."""
+    return (
+        text
+        .replace("\u201c", '"').replace("\u201d", '"')   # " "  → "
+        .replace("\u2018", "'").replace("\u2019", "'")   # ' '  → '
+        .replace("\u2013", "-").replace("\u2014", "-")   # – —  → -
+        .replace("\u2026", "...")                         # …    → ...
+        .replace("\u2022", "-")                           # •    → -
+        .replace("\u00a0", " ")                           # NBSP → space
+    )
+
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def slugify(text: str) -> str:
@@ -104,6 +119,9 @@ def parse_eval(eval_path: Path) -> dict:
     url_match = re.search(r"\*\*URL:\*\*\s*([^\n|]+)", text)
     url = url_match.group(1).strip() if url_match else ""
 
+    archetype_match = re.search(r"\*\*Archetype:\*\*\s*([^\n|]+)", text)
+    archetype = archetype_match.group(1).strip() if archetype_match else "ds-product"
+
     return {
         "role": role,
         "company": company,
@@ -115,10 +133,37 @@ def parse_eval(eval_path: Path) -> dict:
         "interview_angle": interview_angle,
         "jd_source": jd_source,
         "jd_text": jd_text,
+        "archetype": archetype,
     }
 
 
 # ── Step 2: Load base CV ──────────────────────────────────────────────────────
+
+ARCHETYPE_PROJECT_ORDER: dict[str, list[str]] = {
+    "ds-product":         ["London Bible", "UN Speeches", "No botes", "ADCC", "ds-radar"],
+    "ml-engineer":        ["ds-radar", "UN Speeches", "London Bible", "ADCC", "No botes"],
+    "analytics-engineer": ["London Bible", "ADCC", "UN Speeches", "No botes", "ds-radar"],
+    "data-engineer":      ["ds-radar", "No botes", "UN Speeches", "London Bible", "ADCC"],
+    "ai-engineer":        ["ds-radar", "UN Speeches", "ADCC", "No botes", "London Bible"],
+}
+
+
+def reorder_projects_for_archetype(projects: list, archetype: str) -> list:
+    """Reorder project list so archetype-preferred projects appear first.
+
+    Projects not matching any slug keep their original relative order at the end.
+    """
+    order = ARCHETYPE_PROJECT_ORDER.get(archetype, ARCHETYPE_PROJECT_ORDER["ds-product"])
+    slugs = [s.lower() for s in order]
+
+    def rank(p: str) -> int:
+        p_lower = p.lower()
+        for i, slug in enumerate(slugs):
+            if slug.lower() in p_lower:
+                return i
+        return len(slugs)
+
+    return sorted(projects, key=rank)
 
 def _compact_list(items: list[str], limit: int = 8) -> str:
     picked = [str(item).strip() for item in items if str(item).strip()][:limit]
@@ -249,7 +294,7 @@ Rules:
 - Never fabricate employers, clients, institutions, degrees, certifications, dates, locations, projects, or skills.
 - If a field is absent from the provided profile data, omit it; never guess.
 - Reorder bullets so the most relevant experience for this JD comes first.
-- Rewrite the Summary section (max 3 sentences) to emphasise fit for THIS specific role.
+- Rewrite the professional summary as a 2-sentence exit narrative: sentence 1 frames the candidate's current work ({experience_0_title} at {experience_0_company}) as the foundation, sentence 2 connects it forward to the target role ({role} at {company}). Do not use generic phrases like "passionate about" or "seeking opportunities".
 - Keep the same sections as the canonical CV unless there is a strong reason to drop one.
 - Inject important JD keywords naturally — no keyword stuffing.
 - Output a complete CV in GitHub-flavoured Markdown only. No preamble, no explanation.
@@ -269,7 +314,8 @@ CANONICAL CV:
 {cv_text}"""
 
 
-def rewrite_cv_with_claude(parsed: dict, base_cv: str, profile_facts: str) -> str:
+def rewrite_cv_with_claude(parsed: dict, base_cv: str, profile_facts: str,
+                           experience_0_title: str = "", experience_0_company: str = "") -> str:
     scores_str = " | ".join(
         f"{k.replace('_', ' ').title()}: {v}"
         for k, v in parsed["dim_scores"].items()
@@ -280,6 +326,10 @@ def rewrite_cv_with_claude(parsed: dict, base_cv: str, profile_facts: str) -> st
         profile_facts=profile_facts,
         jd_text=parsed["jd_text"],
         cv_text=base_cv,
+        role=parsed["role"],
+        company=parsed["company"],
+        experience_0_title=experience_0_title,
+        experience_0_company=experience_0_company,
     )
 
     response = _client.messages.create(
@@ -325,13 +375,17 @@ def save_cv(
     jd_source: str,
     interview_angle: str,
     eval_path: Path,
+    keyword_coverage_matched: int = 0,
+    keyword_coverage_total: int = 0,
+    keyword_coverage_pct: int = 0,
 ) -> Path:
     today = date.today().strftime("%Y%m%d")
     job_key = build_job_key(url=url, company=company, title=role)
 
     header = (
         f"<!-- Tailored for: {company} | Grade: {grade} | JD: {jd_source} | "
-        f"Source eval: {eval_path.name} | Generated: {today} -->\n"
+        f"Source eval: {eval_path.name} | Generated: {today} | "
+        f"Keywords: {keyword_coverage_matched}/{keyword_coverage_total} ({keyword_coverage_pct}%) -->\n"
         f"<!-- Job key: {job_key} -->\n"
         f"<!-- Interview angle: {interview_angle} -->\n\n"
     )
@@ -555,19 +609,40 @@ def generate_pdf(eval_path: "Path | str") -> str:
 
     parsed = parse_eval(eval_path)
     profile = load_profile_data()
+    profile["projects"] = reorder_projects_for_archetype(
+        profile.get("projects", []), parsed.get("archetype", "ds-product")
+    )
+    print(f"[ARCHETYPE] {parsed.get('archetype', 'ds-product')} — projects reordered")
     base_cv = build_canonical_cv(profile)
     profile_facts = build_profile_fact_block(profile)
 
     print(f"CV_REWRITE company={parsed['company']} grade={parsed['grade']} jd_source={parsed['jd_source']}")
 
+    exp0_raw = next((str(e).strip() for e in profile.get("experience", []) if str(e).strip()), "")
+    exp0_parts = re.split(r"\s+[—–-]+\s+|\s+at\s+", exp0_raw, maxsplit=1)
+    experience_0_title = exp0_parts[0].strip() if exp0_parts else ""
+    experience_0_company = re.split(r"\s*\(", exp0_parts[1], maxsplit=1)[0].strip() if len(exp0_parts) > 1 else ""
+
     if parsed["jd_source"] == "REAL" and parsed["jd_text"]:
-        tailored_cv = rewrite_cv_with_claude(parsed, base_cv, profile_facts)
+        tailored_cv = rewrite_cv_with_claude(parsed, base_cv, profile_facts,
+                                             experience_0_title, experience_0_company)
     else:
         if parsed["jd_source"] != "REAL":
             print("[WARN] JD_SOURCE is MOCK — Claude rewrite skipped, using keyword injection")
         elif not parsed["jd_text"]:
             print("[WARN] JD text missing from eval — Claude rewrite skipped, using keyword injection")
         tailored_cv = inject_keywords(base_cv, parsed["keywords"])
+
+    keywords = parsed.get("keywords", [])
+    keyword_coverage_total = len(keywords)
+    keyword_coverage_matched = 0
+    keyword_coverage_pct = 0
+    if keywords:
+        cv_lower = tailored_cv.lower()
+        keyword_coverage_matched = sum(1 for kw in keywords if kw.lower() in cv_lower)
+        keyword_coverage_pct = round(keyword_coverage_matched / keyword_coverage_total * 100)
+        print(f"[KEYWORDS] {keyword_coverage_matched}/{keyword_coverage_total} coverage ({keyword_coverage_pct}%)")
+    # TODO: pass keyword_coverage_* into save_cv() header comment or tracker notes field
 
     markdown_path, pdf_path = build_output_paths(parsed["company"])
     save_cv(
@@ -580,11 +655,14 @@ def generate_pdf(eval_path: "Path | str") -> str:
         parsed["jd_source"],
         parsed["interview_angle"],
         eval_path,
+        keyword_coverage_matched=keyword_coverage_matched,
+        keyword_coverage_total=keyword_coverage_total,
+        keyword_coverage_pct=keyword_coverage_pct,
     )
     print(f"[CV] Markdown saved: {markdown_path.relative_to(REPO_ROOT)}")
 
     try:
-        html_content = render_cv_html(tailored_cv, parsed["company"], parsed["role"])
+        html_content = normalize_for_ats(render_cv_html(tailored_cv, parsed["company"], parsed["role"]))
         render_pdf(html_content, pdf_path)
         record_artifact_identity(
             pdf_path,

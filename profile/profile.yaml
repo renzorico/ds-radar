@@ -61,6 +61,12 @@ roles:
     - "Non-technical 'data' roles (e.g. data entry, admin-heavy reporting)."
     - "Heavily sales/BD-focused 'AI' titles without real technical work."
 
+target_roles:
+  - Data Scientist
+  - ML Engineer
+  - Analytics Engineer
+  - AI Engineer
+
 long_term_targets:
   archetypes:
     - "Data Scientist at tech/AI startup (Series A–C)"
@@ -215,6 +221,18 @@ scoring:
   notes:
     - "Sponsorship gate runs before grade-based gates."
     - "For now, C roles may still be interesting as 'backup' but are not auto-pipeline targets."
+
+scoring_weights:
+  role_match: 0.25
+  skills_alignment: 0.20
+  seniority: 0.15
+  compensation: 0.13
+  growth_trajectory: 0.12
+  company_stage: 0.07
+  product_interest: 0.05
+  interview_likelihood: 0.02
+  timeline: 0.01
+  geography: 0.00
 
 ats_targets:
   - "greenhouse"

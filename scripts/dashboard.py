@@ -6,6 +6,7 @@ Usage: python scripts/dashboard.py
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import random
 import shlex
@@ -61,22 +62,67 @@ STATUS_ACTIONS = {
     "K": "skipped",
 }
 REPO_ROOT = Path(__file__).resolve().parent.parent
+DASHBOARD_STATE_FILE = REPO_ROOT / ".dashboard.state.json"
 FOCUS_ORDER = ["jobs", "evaluation", "details"]
 KEY_HINTS = (
-    "Keys: 1-5 filters  j/k or arrows move  h/l switch pane  e eval  c cv  o outreach  "
-    "p apply  m toggle MOCK  u evaluated  v cv_ready  a applied  x skipped  ? help  q quit"
+    "1-5 filter  j/k move  h/l pane  / search  e eval  c cv  o outreach  "
+    "p apply  m mock  u/v/a/x status  r reload  ? help  q quit"
 )
 
 
 class Pet:
-    """Tiny ASCII companion for the cockpit footer.
+    """Cheerleader companion — walks, cheers, reacts to grades, and throws messages."""
 
-    The pet updates on a timer so it still feels alive when the user is idle.
-    Event handlers can temporarily override the mood for a few seconds.
-    """
+    TICK_INTERVAL = 0.28
+    MOOD_HOLD_SECONDS = 5.0
+    MESSAGE_ROTATE_SECONDS = 5.5
 
-    TICK_INTERVAL = 0.45
-    MOOD_HOLD_SECONDS = 4.0
+    MESSAGES: dict[str, list[str]] = {
+        "idle":      [
+            "Find your dream role! ",
+            "Keep exploring!       ",
+            "You've got this!      ",
+            "The right job is out there",
+            "Stay curious!         ",
+            "Dream job incoming... ",
+            "Scanning the market...",
+            "Every rejection = data",
+        ],
+        "excited":   [
+            "APPLY NOW! This is it!",
+            "Top-tier match! Go!!!  ",
+            "A-grade alert! Don't miss this!",
+            "Perfect fit detected! ",
+            "This one has your name on it",
+        ],
+        "happy":     [
+            "Solid pick! Worth a shot",
+            "Good fit — send it!   ",
+            "This could be the one!",
+            "Nice role! Go for it! ",
+            "B+ vibes. Apply!      ",
+        ],
+        "concerned": [
+            "Keep looking...       ",
+            "Not quite your match  ",
+            "Better ones ahead!    ",
+            "Onto the next one     ",
+            "This market has more  ",
+        ],
+        "applied":   [
+            "Go get 'em! \\o/      ",
+            "Fingers crossed!!!    ",
+            "Best of luck out there",
+            "Rooting for you!      ",
+            "You've totally got this",
+        ],
+        "cv_ready":  [
+            "Resume looks sharp!   ",
+            "CV polished and ready!",
+            "Almost there!         ",
+            "Ready to roll!        ",
+        ],
+    }
 
     def __init__(self) -> None:
         self.x = 0
@@ -87,22 +133,57 @@ class Pet:
         self.last_width = 0
         self.action = "walk"
         self.mood_until = 0.0
+        self._msg_idx = 0
+        self._last_msg_tick = 0.0
+        self._current_msg = self.MESSAGES["idle"][0]
 
     def on_event(self, event: str) -> None:
         now = time.monotonic()
-        if event in {"cv_ready", "applied", "good_grade"}:
+        if event == "applied":
+            self.mood = "applied"
+            self.action = "celebrate"
+            self.mood_until = now + self.MOOD_HOLD_SECONDS
+            self._pick_message("applied")
+        elif event == "cv_ready":
+            self.mood = "cv_ready"
+            self.action = "celebrate"
+            self.mood_until = now + self.MOOD_HOLD_SECONDS
+            self._pick_message("cv_ready")
+        elif event == "good_grade_a":
+            self.mood = "excited"
+            self.action = "celebrate"
+            self.mood_until = now + self.MOOD_HOLD_SECONDS
+            self._pick_message("excited")
+        elif event == "good_grade":
             self.mood = "happy"
             self.action = "celebrate"
             self.mood_until = now + self.MOOD_HOLD_SECONDS
-            return
-        if event == "bad_grade":
+            self._pick_message("happy")
+        elif event == "bad_grade":
             self.mood = "concerned"
             self.action = "sit"
             self.mood_until = now + self.MOOD_HOLD_SECONDS
-            return
-        self.mood = "idle"
-        self.action = "walk"
-        self.mood_until = 0.0
+            self._pick_message("concerned")
+        else:
+            self.mood = "idle"
+            self.action = "walk"
+            self.mood_until = 0.0
+
+    def _pick_message(self, mood_key: str) -> None:
+        msgs = self.MESSAGES.get(mood_key, self.MESSAGES["idle"])
+        self._msg_idx = random.randrange(len(msgs))
+        self._current_msg = msgs[self._msg_idx]
+        self._last_msg_tick = time.monotonic()
+
+    def get_message(self) -> str:
+        now = time.monotonic()
+        mood_key = self.mood if self.mood in self.MESSAGES else "idle"
+        msgs = self.MESSAGES[mood_key]
+        if now - self._last_msg_tick >= self.MESSAGE_ROTATE_SECONDS:
+            self._msg_idx = (self._msg_idx + 1) % len(msgs)
+            self._current_msg = msgs[self._msg_idx]
+            self._last_msg_tick = now
+        return self._current_msg
 
     def tick(self, width: int) -> None:
         try:
@@ -125,14 +206,12 @@ class Pet:
 
             if self.action == "walk":
                 self.x += self.direction
-            elif self.action == "look":
-                pass
             elif self.action == "sit":
                 if self.frame % 2 == 0:
                     self.action = "walk"
             elif self.action == "celebrate":
                 self.x += self.direction
-                if self.frame % 2 == 1:
+                if self.frame % 3 == 2:
                     self.action = "walk"
 
             limit = max(0, width - self.sprite_width())
@@ -143,8 +222,8 @@ class Pet:
                 self.x = limit
                 self.direction = -1
 
-            if self.mood == "idle" and random.random() < 0.12:
-                self.action = random.choice(["look", "sit", "walk"])
+            if self.mood == "idle" and random.random() < 0.08:
+                self.action = random.choice(["look", "sit", "walk", "walk"])
         except Exception:
             self.mood = "idle"
             self.action = "walk"
@@ -154,20 +233,36 @@ class Pet:
 
     def _sprite(self) -> tuple[str, str, str]:
         right = self.direction >= 0
-        if self.mood == "happy":
-            return (r" \o/   ", r"  |    ", r" / \   ")
+        f = self.frame
+
+        if self.mood in ("excited", "applied"):
+            # Jump with arms raised high
+            body = r" \O/   " if f % 2 == 0 else r" /O\   "
+            return (body, r"  ||   ", r"  ^^   ")
+
+        if self.mood in ("happy", "cv_ready") or self.action == "celebrate":
+            # Cheering — alternating pom-pom arms
+            if f % 2 == 0:
+                return (r" \o/   ", r"  |    ", r" / \   ")
+            return (r" /o\   ", r"  |    ", r" / \   ")
+
         if self.mood == "concerned":
-            eyes = "o ." if right else ". o"
-            return (r"  __   ", f" ({eyes}) ", r" /__\  ")
+            face = r" (-.-)  " if f % 2 == 0 else r" (-_-)  "
+            return (r"  __   ", face[:7], r" /~~\  ")
+
         if self.action == "sit":
-            return (r"  __   ", r" (uu)  ", r" _||_  ")
+            face = r" (uu)  " if f % 2 == 0 else r" (u_u) "
+            return (r"  __   ", face, r"  ~~   ")
+
         if self.action == "look":
-            eyes = "o o" if self.frame % 2 == 0 else "o O"
+            eyes = "o o" if f % 2 == 0 else "o O"
             return (r"  __   ", f" ({eyes}) ", r" /__\  ")
+
+        # Walk
         if right:
-            feet = r" _/ \  " if self.frame % 2 == 0 else r" / \_  "
+            feet = r" _/ \  " if f % 2 == 0 else r" / \_  "
             return (r"  __   ", r" (o>)  ", feet)
-        feet = r"  / \_ " if self.frame % 2 == 0 else r" _/ \  "
+        feet = r"  / \_ " if f % 2 == 0 else r" _/ \  "
         return (r"  __   ", r" (<o)  ", feet)
 
     def _place(self, width: int, text: str) -> str:
@@ -182,17 +277,44 @@ class Pet:
             line[target] = char
         return "".join(line).rstrip() or " "
 
+    def _bubble(self, width: int) -> str:
+        """Speech bubble centred above the pet, or nudged toward centre if pet is near edge."""
+        msg = self.get_message().strip()
+        bubble = f'"{msg}"'
+        bw = len(bubble)
+        if width <= bw + 2:
+            return bubble[:width]
+        # Centre the bubble
+        bx = max(0, (width - bw) // 2)
+        line = [" "] * width
+        for i, ch in enumerate(bubble):
+            if bx + i < width:
+                line[bx + i] = ch
+        return "".join(line).rstrip() or " "
+
     def render(self, width: int) -> list[tuple[str, str]]:
         try:
             self.tick(width)
             if width < 16:
                 return []
             top, mid, low = self._sprite()
-            style = "class:pet_happy" if self.mood == "happy" else "class:pet_warn" if self.mood == "concerned" else "class:pet"
-            floor = "_" * max(0, width - 1)
+            body_style = (
+                "class:pet_excited" if self.mood in ("excited", "applied")
+                else "class:pet_happy" if self.mood in ("happy", "cv_ready")
+                else "class:pet_warn" if self.mood == "concerned"
+                else "class:pet"
+            )
+            msg_style = (
+                "class:pet_excited" if self.mood in ("excited", "applied")
+                else "class:pet_happy" if self.mood in ("happy", "cv_ready")
+                else "class:pet_warn" if self.mood == "concerned"
+                else "class:pet_msg"
+            )
+            floor = "─" * max(0, width - 1)
             lines = [
-                (style, self._place(width, top)),
-                (style, self._place(width, mid)),
+                (msg_style,        self._bubble(width)),
+                (body_style,       self._place(width, top)),
+                (body_style,       self._place(width, mid)),
                 ("class:pet_floor", floor),
             ]
             fragments: list[tuple[str, str]] = []
@@ -219,6 +341,8 @@ class DashboardState:
     eval_scroll: int = 0
     detail_scroll: int = 0
     show_mock: bool = False
+    search_query: str = ""
+    search_active: bool = False
     pet: Pet = field(default_factory=Pet)
 
     def __post_init__(self) -> None:
@@ -229,9 +353,15 @@ class DashboardState:
     @property
     def filtered_records(self) -> list[JobRecord]:
         rows = filter_records(self.records, self.filter_name)
-        if self.show_mock:
-            return rows
-        return [record for record in rows if (record.jd_src or "").upper() == "REAL"]
+        if not self.show_mock:
+            rows = [record for record in rows if (record.jd_src or "").upper() == "REAL"]
+        if self.search_query:
+            q = self.search_query.lower()
+            rows = [
+                r for r in rows
+                if q in r.company.lower() or q in r.role.lower() or q in (r.status or "").lower()
+            ]
+        return rows
 
     def current_record(self) -> JobRecord | None:
         rows = self.filtered_records
@@ -358,7 +488,9 @@ class DashboardState:
         if record is None:
             self.pet.on_event("reset")
             return
-        if record.grade in {"A", "B"}:
+        if record.grade == "A":
+            self.pet.on_event("good_grade_a")
+        elif record.grade == "B":
             self.pet.on_event("good_grade")
         elif record.grade in {"D", "F"}:
             self.pet.on_event("bad_grade")
@@ -428,17 +560,21 @@ def _slice_lines(lines: list[tuple[str, str]], offset: int) -> list[tuple[str, s
     return output
 
 
+_GRADE_STYLE = {"A": "class:grade_a", "B": "class:grade_b", "C": "class:grade_c",
+                "D": "class:grade_d", "F": "class:grade_f"}
+
+
 def render_table(state: DashboardState) -> list[tuple[str, str]]:
     rows = state.filtered_records
-    fragments: list[tuple[str, str]] = [pane_title(state, "jobs", "Jobs"), ("", "\n")]
-    header = (
-        f"{'DATE':<10} {'G':<2} {'JD':<4} {'SP':<4} {'COMPANY':<18} ROLE"
-    )
+    total_all = len(filter_records(state.records, state.filter_name))
+    visible_label = f"{len(rows)} shown" if len(rows) != total_all else f"{len(rows)} jobs"
+    fragments: list[tuple[str, str]] = [pane_title(state, "jobs", f"Jobs  {visible_label}"), ("", "\n")]
+    header = f"{'DATE':<10} {'G':<2} {'SCR':<5} {'SP':<4} {'STATUS':<8} {'COMPANY':<16} ROLE"
     fragments.append(("class:header", header))
     fragments.append(("", "\n"))
 
     if not rows:
-        fragments.append(("class:muted", "No rows match the current filter."))
+        fragments.append(("class:muted", "  No rows match the current filter."))
         return fragments
 
     start = max(0, state.selected_index - (VISIBLE_ROWS // 2))
@@ -447,22 +583,24 @@ def render_table(state: DashboardState) -> list[tuple[str, str]]:
 
     for index in range(start, end):
         record = rows[index]
-        style = "class:selected" if index == state.selected_index else ""
-        prefix = ">" if index == state.selected_index else " "
-        line = (
-            f"{prefix} {record.date:<10} {record.grade:<2} {record.jd_src:<4} "
-            f"{record.spons:<4} "
-            f"{record.company[:18]:<18} {record.role[:34]}"
-        )
-        fragments.append((style, line))
-        fragments.append(("", "\n"))
+        is_sel = index == state.selected_index
+        row_style = "class:selected" if is_sel else ""
+        grade_style = row_style or _GRADE_STYLE.get(record.grade, "")
+        prefix = ">" if is_sel else " "
+        score_str = record.score if record.score and record.score != "?" else "  -  "
+        status_short = (record.status or "")[:7]
+        fragments.extend([
+            (row_style,    f"{prefix} {record.date:<10} "),
+            (grade_style,  f"{record.grade:<2}"),
+            (row_style,    f" {score_str:<5} {record.spons:<4} {status_short:<8} "
+                           f"{record.company[:16]:<16} {record.role[:30]}"),
+            ("",           "\n"),
+        ])
 
-    fragments.append(
-        (
-            "class:muted",
-            f"Rows {start + 1}-{end} of {len(rows)} | selected {state.selected_index + 1}",
-        )
-    )
+    fragments.append((
+        "class:muted",
+        f"  {start + 1}–{end} of {len(rows)}  ·  row {state.selected_index + 1}",
+    ))
     return fragments
 
 
@@ -532,7 +670,8 @@ def render_details(state: DashboardState) -> list[tuple[str, str]]:
 
 
 def render_header(state: DashboardState) -> list[tuple[str, str]]:
-    parts: list[tuple[str, str]] = [("class:title", "ds-radar cockpit  ")]
+    total = len(state.filtered_records)
+    parts: list[tuple[str, str]] = [("class:title", f"ds-radar  ({total})  ")]
     for name in FILTER_OPTIONS:
         style = "class:filter_active" if state.filter_name == name else "class:filter"
         parts.append((style, FILTER_LABELS[name]))
@@ -540,6 +679,9 @@ def render_header(state: DashboardState) -> list[tuple[str, str]]:
     mock_style = "class:filter_active" if state.show_mock else "class:filter"
     mock_label = "M REAL+MOCK" if state.show_mock else "M REAL only"
     parts.append((mock_style, mock_label))
+    if state.search_query and not state.search_active:
+        parts.append(("", "  "))
+        parts.append(("class:filter_active", f'/{state.search_query}'))
     return parts
 
 
@@ -592,8 +734,34 @@ def open_path_in_terminal(path_text: str) -> None:
     subprocess.run(command, check=False)
 
 
+def load_dashboard_session() -> dict:
+    """Return saved session state or defaults."""
+    if DASHBOARD_STATE_FILE.exists():
+        try:
+            return json.loads(DASHBOARD_STATE_FILE.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    return {"filter_name": "all", "selected_index": 0}
+
+
+def save_dashboard_session(state: DashboardState) -> None:
+    """Persist filter and scroll position for next session."""
+    DASHBOARD_STATE_FILE.write_text(
+        json.dumps({"filter_name": state.filter_name, "selected_index": state.selected_index}, indent=2),
+        encoding="utf-8",
+    )
+
+
 def build_dashboard_app(state: DashboardState) -> Application:
+    def render_search_bar() -> list[tuple[str, str]]:
+        if state.search_active:
+            return [("class:label", f"  Search: {state.search_query}█")]
+        if state.search_query:
+            return [("class:muted", f"  Filter: {state.search_query}  (/ edit · Esc clear)")]
+        return [("", "")]
+
     header_control = FormattedTextControl(lambda: render_header(state))
+    search_control = FormattedTextControl(render_search_bar)
     table_control = FormattedTextControl(lambda: render_table(state), focusable=False)
     evaluation_control = FormattedTextControl(lambda: render_evaluation(state), focusable=False)
     detail_control = FormattedTextControl(lambda: render_details(state), focusable=False)
@@ -606,6 +774,10 @@ def build_dashboard_app(state: DashboardState) -> Application:
 
     @bindings.add("q")
     def _quit(event) -> None:
+        if state.search_active:
+            state.search_query += "q"
+            event.app.invalidate()
+            return
         event.app.exit()
 
     @bindings.add("up")
@@ -675,6 +847,14 @@ def build_dashboard_app(state: DashboardState) -> Application:
 
     @bindings.add("escape")
     def _close_help(event) -> None:
+        if state.search_active or state.search_query:
+            state.search_active = False
+            state.search_query = ""
+            state.selected_index = 0
+            state._clamp_index()
+            state.message = "Search cleared."
+            event.app.invalidate()
+            return
         if state.help_visible:
             state.help_visible = False
             state.message = "Help overlay closed."
@@ -784,9 +964,41 @@ def build_dashboard_app(state: DashboardState) -> Application:
         event.app.invalidate()
         run_in_terminal(lambda: open_path_in_terminal(record.outreach_path))
 
+    @bindings.add("/")
+    def _start_search(event) -> None:
+        state.search_active = True
+        state.search_query = ""
+        state.selected_index = 0
+        state.message = "Type to search — Enter to confirm · Esc to clear"
+        event.app.invalidate()
+
+    @bindings.add("c-h", filter=Condition(lambda: state.search_active))
+    @bindings.add("backspace", filter=Condition(lambda: state.search_active))
+    def _search_backspace(event) -> None:
+        state.search_query = state.search_query[:-1]
+        state.selected_index = 0
+        state._clamp_index()
+        event.app.invalidate()
+
+    @bindings.add("enter", filter=Condition(lambda: state.search_active))
+    def _search_confirm(event) -> None:
+        state.search_active = False
+        state.message = f"Filter: '{state.search_query}' — Esc to clear"
+        event.app.invalidate()
+
+    @bindings.add("<any>", filter=Condition(lambda: state.search_active))
+    def _search_char(event) -> None:
+        key = event.key_sequence[0].key
+        if len(key) == 1 and key.isprintable():
+            state.search_query += key
+            state.selected_index = 0
+            state._clamp_index()
+            event.app.invalidate()
+
     body_container = HSplit(
         [
             Window(content=header_control, height=1),
+            Window(content=search_control, height=1),
             VSplit(
                 [
                     Frame(Window(content=table_control, wrap_lines=False), title="Jobs", width=Dimension(weight=5)),
@@ -796,7 +1008,7 @@ def build_dashboard_app(state: DashboardState) -> Application:
             ),
             Window(content=keybar_control, height=1),
             Window(content=footer_control, height=1),
-            Window(content=pet_control, height=3),
+            Window(content=pet_control, height=4),
         ]
     )
 
@@ -835,10 +1047,12 @@ def build_dashboard_app(state: DashboardState) -> Application:
             "grade_c": "bold ansiyellow",
             "grade_d": "bold ansired",
             "grade_f": "bold ansired",
-            "pet": "#ffffff",
+            "pet": "#aaaaaa",
+            "pet_msg": "italic #aaaaaa",
             "pet_happy": "bold ansigreen",
+            "pet_excited": "bold ansimagenta",
             "pet_warn": "bold ansiyellow",
-            "pet_floor": "#888888",
+            "pet_floor": "#444444",
         }
     )
 
@@ -861,10 +1075,12 @@ def main() -> None:
     parser.add_argument("--apply-live", action="store_true", help="Run live apply.py from the dashboard after confirmation")
     args = parser.parse_args()
 
+    session = load_dashboard_session()
     state = DashboardState(
         sort_by=args.sort,
-        filter_name=args.filter,
+        filter_name=args.filter if args.filter != "all" else session.get("filter_name", "all"),
         apply_dry_run=not args.apply_live,
+        selected_index=session.get("selected_index", 0),
     )
     if args.print_startup:
         print(startup_log(state))
@@ -884,7 +1100,10 @@ def main() -> None:
         f"pageup/down scroll panes | m toggle MOCK | p apply ({mode}) | u/v/a/x set status | q quit"
     )
     app = build_dashboard_app(state)
-    app.run()
+    try:
+        app.run()
+    finally:
+        save_dashboard_session(state)
 
 
 if __name__ == "__main__":
