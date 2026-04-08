@@ -122,6 +122,7 @@ def _find_oferta_hooks(company: str) -> str:
     """Return personalisation hooks text from the most recent deep brief for this company."""
     slug = re.sub(r"[\s_]+", "-", company.lower().strip())
     slug = re.sub(r"[^\w-]", "", slug)
+    slug = re.sub(r"-{2,}", "-", slug)
     candidates = sorted(EVALS_DIR.glob(f"deep_{slug}_*.md"), reverse=True)
     if not candidates:
         return ""
@@ -279,6 +280,7 @@ def write_outreach_report(
 
     company_slug = re.sub(r"[\s_]+", "-", company.lower().strip())
     company_slug = re.sub(r"[^\w-]", "", company_slug)
+    company_slug = re.sub(r"-{2,}", "-", company_slug)
     filename = f"outreach_{company_slug}_{today}.md"
 
     APPLICATIONS_DIR.mkdir(parents=True, exist_ok=True)

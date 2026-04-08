@@ -330,6 +330,7 @@ def write_deep_report(
     today = date.today().isoformat()
     company_slug = re.sub(r"[\s_]+", "-", jd["company"].lower().strip())
     company_slug = re.sub(r"[^\w-]", "", company_slug)
+    company_slug = re.sub(r"-{2,}", "-", company_slug)
     filename = f"deep_{company_slug}_{today}.md"
 
     EVALS_DIR.mkdir(parents=True, exist_ok=True)

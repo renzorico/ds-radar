@@ -9,7 +9,7 @@ No API calls, no Playwright. Import logic from evaluate.py and generate_pdf.py.
 import csv
 import json
 import sys
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date
 from pathlib import Path
 
@@ -18,6 +18,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from evaluate import evaluate_url
 from generate_pdf import generate_pdf
+import oferta as _oferta_mod
+import contacto as _contacto_mod
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 
@@ -153,16 +155,115 @@ def main() -> None:
     # Counters
     counts = {"A": 0, "B": 0, "cdf": 0, "pdfs": 0, "already_tracked": 0, "eval_skipped": 0}
 
-    # Step 2 — evaluate URLs (sequential or parallel)
+    def _process_result(result: dict) -> None:
+        """PDF generation + tracker write for one evaluated result. Called as each future completes."""
+        if result.get("skipped"):
+            return
+
+        url = result["url"]
+        company = result.get("company", "?")
+        grade = result.get("grade", "?")
+        score = str(result.get("overall_score", ""))
+        title = result.get("title", "")
+        eval_path = result.get("eval_path")
+
+        if url in tracked_urls:
+            counts["already_tracked"] += 1
+            return
+
+        pdf_path = ""
+        if grade in APPLY_GRADES and eval_path:
+            try:
+                pdf_path = generate_pdf(eval_path)
+                print(f"  → PDF: {pdf_path}")
+            except Exception as e:
+                print(f"  → PDF error for {company}: {e}")
+
+            try:
+                parsed = _oferta_mod.parse_eval_deep(eval_path)
+                jd = {"title": parsed["title"], "company": parsed["company"],
+                      "location": "See eval", "salary": "See eval"}
+                if parsed["jd_source"] == "REAL" and parsed["jd_text"]:
+                    profile = _oferta_mod._load_profile()
+                    brief, _, _ = _oferta_mod.generate_brief_with_claude(parsed, profile)
+                    if brief is not None:
+                        analysis = {**brief, "grade": parsed["grade"], "overall": parsed["overall_score"]}
+                        brief_source = "CLAUDE"
+                    else:
+                        analysis = _oferta_mod.build_deep_analysis(jd, url, parsed)
+                        brief_source = "TEMPLATE_FALLBACK"
+                else:
+                    analysis = _oferta_mod.build_deep_analysis(jd, url, parsed)
+                    brief_source = "TEMPLATE_FALLBACK"
+                _oferta_mod.write_deep_report(analysis, jd, url, brief_source=brief_source)
+                print(f"  → Oferta: {company}")
+            except Exception as e:
+                print(f"  → Oferta error for {company}: {e}")
+
+            try:
+                eval_data = _contacto_mod.get_eval_rich(url)
+                oferta_hooks = _contacto_mod._find_oferta_hooks(company)
+                messages, _, _ = _contacto_mod.generate_outreach_with_claude(eval_data, oferta_hooks, None)
+                if messages is None:
+                    messages = _contacto_mod.build_outreach_template(company, title, grade, None)
+                    source = "TEMPLATE_FALLBACK"
+                else:
+                    source = "CLAUDE"
+                _contacto_mod.write_outreach_report(messages, eval_data, url, source, None)
+                print(f"  → Outreach: {company}")
+            except Exception as e:
+                print(f"  → Outreach error for {company}: {e}")
+
+        if grade == "A":
+            counts["A"] += 1
+        elif grade == "B":
+            counts["B"] += 1
+        else:
+            counts["cdf"] += 1
+
+        if pdf_path:
+            counts["pdfs"] += 1
+
+        status = "cv_ready" if grade in APPLY_GRADES else "skipped"
+        append_tracker_row({
+            "date": today,
+            "company": company,
+            "role": title,
+            "url": url,
+            "grade": grade,
+            "score": score,
+            "status": status,
+            "pdf_path": pdf_path,
+            "notes": "",
+        })
+        tracked_urls.add(url)
+
+    # Step 2 — evaluate URLs, Step 3 — PDF + tracker written per result as it completes
     pending_state: dict[str, str] = {}
+    done = 0
     if parallel > 1:
         with ThreadPoolExecutor(max_workers=parallel) as executor:
-            results = list(executor.map(evaluate_url, urls))
-        for result in results:
-            pending_state[result["url"]] = "succeeded" if not result.get("skipped") else "skipped"
-        _save_state(pending_state)
+            future_to_url = {executor.submit(evaluate_url, url): url for url in urls}
+            for future in as_completed(future_to_url):
+                url = future_to_url[future]
+                done += 1
+                try:
+                    result = future.result()
+                    company = result.get("company", "?")
+                    if result.get("skipped"):
+                        counts["eval_skipped"] += 1
+                        print(f"  [{done}/{total}] {company} — skipped")
+                    else:
+                        grade = result.get("grade", "?")
+                        score = result.get("overall_score", "?")
+                        print(f"  [{done}/{total}] {company} → {grade} ({score}/5.0)")
+                    pending_state[url] = "succeeded" if not result.get("skipped") else "skipped"
+                    _process_result(result)
+                except Exception as exc:
+                    print(f"  [{done}/{total}] ERROR {url} — {exc}")
+                    pending_state[url] = "failed"
+                _save_state(pending_state)
     else:
-        results = []
         for i, url in enumerate(urls, 1):
             result = evaluate_url(url)
             company = result.get("company", "?")
@@ -175,58 +276,7 @@ def main() -> None:
                 print(f"  [{i}/{total}] Evaluating {company}... → {grade} ({score}/5.0)")
             pending_state[url] = "succeeded" if not result.get("skipped") else "skipped"
             _save_state(pending_state)
-            results.append(result)
-
-    # Step 3 — generate PDFs for B+ grades, Step 4 — update tracker
-    print()
-    for result in results:
-        if result["skipped"]:
-            continue
-
-        url = result["url"]
-        company = result.get("company", "?")
-        grade = result.get("grade", "?")
-        score = str(result.get("overall_score", ""))
-        title = result.get("title", "")
-        eval_path = result.get("eval_path")
-
-        # Tracker dedup
-        if url in tracked_urls:
-            counts["already_tracked"] += 1
-            continue
-
-        pdf_path = ""
-        if grade in APPLY_GRADES and eval_path:
-            try:
-                pdf_path = generate_pdf(eval_path)
-                print(f"  → PDF generated: {pdf_path}")
-            except Exception as e:
-                print(f"  → PDF error for {company}: {e}")
-
-        # Tally grades
-        if grade == "A":
-            counts["A"] += 1
-        elif grade == "B":
-            counts["B"] += 1
-        else:
-            counts["cdf"] += 1
-
-        if pdf_path:
-            counts["pdfs"] += 1
-
-        status = "applied" if grade in APPLY_GRADES else "skipped"
-        append_tracker_row({
-            "date": today,
-            "company": company,
-            "role": title,
-            "url": url,
-            "grade": grade,
-            "score": score,
-            "status": status,
-            "pdf_path": pdf_path,
-            "notes": "MOCK",
-        })
-        tracked_urls.add(url)
+            _process_result(result)
 
     # Step 5 — summary
     sep = "─" * 45

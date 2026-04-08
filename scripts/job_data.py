@@ -269,7 +269,8 @@ def resolve_cv_path(
     if exact_matches:
         return exact_matches[0]
 
-    if len(related_rows) == 1:
+    unique_stems = {c.stem for c in all_candidates}
+    if len(related_rows) == 1 or len(unique_stems) == 1:
         for pattern in ("cv_{slug}_*.pdf", "cv_{slug}_*.md"):
             candidate = find_latest_artifact(company, pattern, APPLICATIONS)
             if candidate:
@@ -298,7 +299,7 @@ def resolve_related_artifact(
 
     if exact_matches:
         return exact_matches[0]
-    if len(related_rows) == 1:
+    if len(related_rows) == 1 or len(candidates) == 1:
         return candidates[0] if candidates else None
     if heuristic_matches:
         return heuristic_matches[0]

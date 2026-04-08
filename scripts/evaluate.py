@@ -11,6 +11,7 @@ import os
 import re
 import csv
 import json
+import time
 import threading
 from datetime import date
 from pathlib import Path
@@ -83,6 +84,7 @@ def slugify(text: str) -> str:
     text = text.lower().strip()
     text = re.sub(r"[^\w\s-]", "", text)
     text = re.sub(r"[\s_]+", "-", text)
+    text = re.sub(r"-{2,}", "-", text)
     return text
 
 
@@ -695,6 +697,21 @@ def _safe_json_loads(raw: str):
             raise original_error
 
 
+def _llm_call_with_retry(**kwargs) -> object:
+    """Wrapper around _client.messages.create with exponential backoff on 429."""
+    import anthropic
+    delay = 15
+    for attempt in range(4):
+        try:
+            return _client.messages.create(**kwargs)
+        except anthropic.RateLimitError:
+            if attempt == 3:
+                raise
+            print(f"[RATE LIMIT] 429 — waiting {delay}s before retry {attempt + 1}/3...")
+            time.sleep(delay)
+            delay = min(delay * 2, 120)
+
+
 def _repair_json_with_model(raw: str, error_message: str) -> str:
     repair_prompt = f"""\
 You previously tried to output a JSON object but it was invalid.
@@ -713,7 +730,7 @@ Your task now:
 {raw}
 </raw>"""
 
-    response = _client.messages.create(
+    response = _llm_call_with_retry(
         model=MODEL,
         max_tokens=512,
         temperature=0,
@@ -739,7 +756,7 @@ def real_score(jd: dict, comp_context: str = "") -> dict:
     log_instruction_block(profile_context, calibration_hints)
     log_prompt_preview(user_prompt)
 
-    response = _client.messages.create(
+    response = _llm_call_with_retry(
         model=MODEL,
         max_tokens=500,
         system="You are a job-fit evaluator. Output valid JSON only. No explanation. No preamble.",
