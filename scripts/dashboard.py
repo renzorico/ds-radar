@@ -48,26 +48,28 @@ except ImportError:  # pragma: no cover - module execution fallback
 
 VISIBLE_ROWS = 18
 FILTER_LABELS = {
-    "all": "1 All",
-    "b_plus": "2 B+",
-    "sponsorship_fail": "3 Sponsorship Fail",
-    "linkedin_only": "4 LinkedIn",
-    "ready": "5 Ready",
+    "all":             "1 All",
+    "linkedin":        "2 LinkedIn",
+    "boards":          "3 Boards",
+    "b_plus":          "4 B+",
+    "ready":           "5 Ready",
+    "applied":         "6 Applied",
+    "interview":       "7 Interview",
+    "callback":        "8 Callback",
+    "rejected":        "9 Rejected",
+    "sponsorship_fail":"0 SponsorFail",
 }
+# status key → (canonical_status, auto_advance)
 STATUS_ACTIONS = {
-    "u": "evaluated",
-    "v": "cv_ready",
-    "a": "applied",
-    "x": "skipped",
-    "K": "skipped",
+    "a": ("applied",          True),
+    "x": ("skipped",          True),
+    "i": ("interview",        True),
+    "c": ("callback",         True),
+    "f": ("sponsorship_fail", True),
 }
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DASHBOARD_STATE_FILE = REPO_ROOT / ".dashboard.state.json"
 FOCUS_ORDER = ["jobs", "evaluation", "details"]
-KEY_HINTS = (
-    "1-5 filter  j/k move  h/l pane  / search  e eval  c cv  o outreach  "
-    "p apply  m mock  u/v/a/x status  r reload  ? help  q quit"
-)
 
 
 class Pet:
@@ -116,6 +118,18 @@ class Pet:
             "Rooting for you!      ",
             "You've totally got this",
         ],
+        "rejected":  [
+            "Their loss, next one! ",
+            "Data point collected. ",
+            "Onwards and upwards!  ",
+            "Better fit ahead!     ",
+        ],
+        "interview": [
+            "Interview incoming!!! ",
+            "Show them what u got! ",
+            "Prep those stories!   ",
+            "This is the one!      ",
+        ],
         "cv_ready":  [
             "Resume looks sharp!   ",
             "CV polished and ready!",
@@ -144,6 +158,16 @@ class Pet:
             self.action = "celebrate"
             self.mood_until = now + self.MOOD_HOLD_SECONDS
             self._pick_message("applied")
+        elif event == "interview":
+            self.mood = "excited"
+            self.action = "celebrate"
+            self.mood_until = now + self.MOOD_HOLD_SECONDS
+            self._pick_message("interview")
+        elif event == "rejected":
+            self.mood = "concerned"
+            self.action = "sit"
+            self.mood_until = now + self.MOOD_HOLD_SECONDS
+            self._pick_message("rejected")
         elif event == "cv_ready":
             self.mood = "cv_ready"
             self.action = "celebrate"
@@ -229,41 +253,83 @@ class Pet:
             self.action = "walk"
 
     def sprite_width(self) -> int:
-        return 7
+        return 9
 
-    def _sprite(self) -> tuple[str, str, str]:
-        right = self.direction >= 0
+    def _sprite(self) -> list[str]:
+        """Return 8 lines of ASCII robot art based on mood/frame."""
         f = self.frame
+        right = self.direction >= 0
 
-        if self.mood in ("excited", "applied"):
-            # Jump with arms raised high
-            body = r" \O/   " if f % 2 == 0 else r" /O\   "
-            return (body, r"  ||   ", r"  ^^   ")
+        if self.mood in ("excited", "applied", "interview"):
+            # Arms raised, jumping
+            arm_l = "╱" if f % 2 == 0 else "│"
+            arm_r = "╲" if f % 2 == 0 else "│"
+            feet  = " ╝   ╚ " if f % 2 == 0 else "  ╝ ╚  "
+            return [
+                " ╔═══╗ ",
+                " ║◉ ◉║ ",
+                " ╠═══╣ ",
+                f"{arm_l}║ ▲ ║{arm_r}",
+                " ║   ║ ",
+                " ╚═══╝ ",
+                "  │ │  ",
+                feet,
+            ]
 
         if self.mood in ("happy", "cv_ready") or self.action == "celebrate":
-            # Cheering — alternating pom-pom arms
-            if f % 2 == 0:
-                return (r" \o/   ", r"  |    ", r" / \   ")
-            return (r" /o\   ", r"  |    ", r" / \   ")
+            arm_l = "╲" if f % 2 == 0 else "─"
+            arm_r = "╱" if f % 2 == 0 else "─"
+            return [
+                " ╔═══╗ ",
+                " ║◉ ◉║ ",
+                " ╠═══╣ ",
+                f"{arm_l}║ ◡ ║{arm_r}",
+                " ║   ║ ",
+                " ╚═══╝ ",
+                "  │ │  ",
+                " ╝   ╚ ",
+            ]
 
         if self.mood == "concerned":
-            face = r" (-.-)  " if f % 2 == 0 else r" (-_-)  "
-            return (r"  __   ", face[:7], r" /~~\  ")
+            eyes = "× ×" if f % 2 == 0 else "· ·"
+            return [
+                " ╔═══╗ ",
+                f" ║{eyes}║ ",
+                " ╠═══╣ ",
+                "─║ ▽ ║─",
+                " ║   ║ ",
+                " ╚═══╝ ",
+                "  │ │  ",
+                " ╝   ╚ ",
+            ]
 
         if self.action == "sit":
-            face = r" (uu)  " if f % 2 == 0 else r" (u_u) "
-            return (r"  __   ", face, r"  ~~   ")
+            return [
+                " ╔═══╗ ",
+                " ║- -║ ",
+                " ╠═══╣ ",
+                "─║   ║─",
+                " ╚═══╝ ",
+                "   │   ",
+                " ──┴── ",
+                "       ",
+            ]
 
-        if self.action == "look":
-            eyes = "o o" if f % 2 == 0 else "o O"
-            return (r"  __   ", f" ({eyes}) ", r" /__\  ")
-
-        # Walk
-        if right:
-            feet = r" _/ \  " if f % 2 == 0 else r" / \_  "
-            return (r"  __   ", r" (o>)  ", feet)
-        feet = r"  / \_ " if f % 2 == 0 else r" _/ \  "
-        return (r"  __   ", r" (<o)  ", feet)
+        # Walk / idle
+        eyes = "◉ ◉" if f % 2 == 0 else "◎ ◎"
+        arm_l = "╲" if right else "╱"
+        arm_r = "╱" if right else "╲"
+        feet  = " ╝  ╚  " if f % 2 == 0 else "  ╝  ╚ "
+        return [
+            " ╔═══╗ ",
+            f" ║{eyes}║ ",
+            " ╠═══╣ ",
+            f"{arm_l}║   ║{arm_r}",
+            " ║   ║ ",
+            " ╚═══╝ ",
+            "  │ │  ",
+            feet,
+        ]
 
     def _place(self, width: int, text: str) -> str:
         if width <= 0:
@@ -297,26 +363,24 @@ class Pet:
             self.tick(width)
             if width < 16:
                 return []
-            top, mid, low = self._sprite()
+            sprite_lines = self._sprite()
             body_style = (
-                "class:pet_excited" if self.mood in ("excited", "applied")
+                "class:pet_excited" if self.mood in ("excited", "applied", "interview")
                 else "class:pet_happy" if self.mood in ("happy", "cv_ready")
                 else "class:pet_warn" if self.mood == "concerned"
                 else "class:pet"
             )
             msg_style = (
-                "class:pet_excited" if self.mood in ("excited", "applied")
+                "class:pet_excited" if self.mood in ("excited", "applied", "interview")
                 else "class:pet_happy" if self.mood in ("happy", "cv_ready")
                 else "class:pet_warn" if self.mood == "concerned"
                 else "class:pet_msg"
             )
             floor = "─" * max(0, width - 1)
-            lines = [
-                (msg_style,        self._bubble(width)),
-                (body_style,       self._place(width, top)),
-                (body_style,       self._place(width, mid)),
-                ("class:pet_floor", floor),
-            ]
+            lines: list[tuple[str, str]] = [(msg_style, self._bubble(width))]
+            for sprite_line in sprite_lines:
+                lines.append((body_style, self._place(width, sprite_line)))
+            lines.append(("class:pet_floor", floor))
             fragments: list[tuple[str, str]] = []
             for idx, (line_style, line) in enumerate(lines):
                 fragments.append((line_style, line))
@@ -404,7 +468,7 @@ class DashboardState:
         self.eval_scroll = 0
         self.detail_scroll = 0
         self.sync_pet_to_current_record()
-        self.message = f"Filter: {FILTER_LABELS[filter_name]}"
+        self.message = f"Filter: {FILTER_LABELS.get(filter_name, filter_name)}"
 
     def toggle_mock(self) -> None:
         self.show_mock = not self.show_mock
@@ -431,16 +495,19 @@ class DashboardState:
         self.sync_pet_to_current_record()
         self.message = "Reloaded tracker and filesystem artifacts."
 
-    def set_status(self, status: str) -> None:
+    def set_status(self, status: str, auto_advance: bool = False) -> None:
         record = self.current_record()
         if record is None:
             self.message = "No row selected."
             return
         if update_tracker_status(record.url, status):
+            next_index = self.selected_index + 1 if auto_advance else self.selected_index
             self.reload()
-            if status in {"cv_ready", "applied"}:
+            if status in {"cv_ready", "applied", "interview", "rejected"}:
                 self.pet.on_event(status)
-            self.message = f"Status updated: {record.company} -> {status}"
+            self.selected_index = next_index
+            self._clamp_index()
+            self.message = f"{record.company} → {status}"
         else:
             self.message = f"Status update failed for {record.company}."
 
@@ -521,15 +588,13 @@ def run_apply_command(url: str, dry_run: bool, cv_path: str = "", job_key: str =
 
 def startup_log(state: DashboardState) -> str:
     counts = {
-        name: len([record for record in filter_records(state.records, name) if state.show_mock or (record.jd_src or "").upper() == "REAL"])
+        name: len([r for r in filter_records(state.records, name) if (r.jd_src or "").upper() == "REAL"])
         for name in FILTER_OPTIONS
     }
+    summary = "  ".join(f"{n}:{counts[n]}" for n in ["all", "b_plus", "ready", "applied", "interview"])
     return (
-        "[dashboard] loaded tracker review cockpit\n"
-        f"[dashboard] rows={len(state.filtered_records)} sort={state.sort_by} mock={'on' if state.show_mock else 'off'} "
-        f"filters=all:{counts['all']} b_plus:{counts['b_plus']} "
-        f"sponsorship_fail:{counts['sponsorship_fail']} linkedin:{counts['linkedin_only']} "
-        f"ready:{counts['ready']}"
+        "[dashboard] ds-radar cockpit loaded\n"
+        f"[dashboard] rows={len(state.filtered_records)} sort={state.sort_by}  {summary}"
     )
 
 
@@ -569,7 +634,7 @@ def render_table(state: DashboardState) -> list[tuple[str, str]]:
     total_all = len(filter_records(state.records, state.filter_name))
     visible_label = f"{len(rows)} shown" if len(rows) != total_all else f"{len(rows)} jobs"
     fragments: list[tuple[str, str]] = [pane_title(state, "jobs", f"Jobs  {visible_label}"), ("", "\n")]
-    header = f"{'DATE':<10} {'G':<2} {'SCR':<5} {'SP':<4} {'STATUS':<8} {'COMPANY':<16} ROLE"
+    header = f"{'STATUS':<13} {'G':<2} {'SCR':<5} {'DATE':<6} {'COMPANY':<18} ROLE"
     fragments.append(("class:header", header))
     fragments.append(("", "\n"))
 
@@ -587,14 +652,17 @@ def render_table(state: DashboardState) -> list[tuple[str, str]]:
         row_style = "class:selected" if is_sel else ""
         grade_style = row_style or _GRADE_STYLE.get(record.grade, "")
         prefix = ">" if is_sel else " "
-        score_str = record.score if record.score and record.score != "?" else "  -  "
-        status_short = (record.status or "")[:7]
+        score_str = record.score if record.score and record.score != "?" else "  - "
+        status_str = (record.status or "")[:12]
+        # Format date as DD-MM
+        date_parts = (record.date or "").split("-")
+        date_short = f"{date_parts[2]}-{date_parts[1]}" if len(date_parts) == 3 else record.date[:5]
         fragments.extend([
-            (row_style,    f"{prefix} {record.date:<10} "),
-            (grade_style,  f"{record.grade:<2}"),
-            (row_style,    f" {score_str:<5} {record.spons:<4} {status_short:<8} "
-                           f"{record.company[:16]:<16} {record.role[:30]}"),
-            ("",           "\n"),
+            (row_style,   f"{prefix} {status_str:<12} "),
+            (grade_style, f"{record.grade:<2}"),
+            (row_style,   f" {score_str:<5} {date_short:<6} "
+                          f"{record.company[:18]:<18} {record.role[:35]}"),
+            ("",          "\n"),
         ])
 
     fragments.append((
@@ -617,8 +685,6 @@ def render_evaluation(state: DashboardState) -> list[tuple[str, str]]:
         ("class:score", f"  Score {record.score}\n"),
         ("", f"Status: {record.status}\n"),
         ("", f"Source: {record.source}\n"),
-        ("", f"JD Source: {record.jd_src}\n"),
-        ("", f"Sponsorship: {record.spons}\n"),
         ("", f"Ready to apply: {'yes' if record.ready_to_apply else 'no'}\n\n"),
         ("class:label", "Paths\n"),
         ("", f"Eval: {format_path(record.eval_path)}\n"),
@@ -676,11 +742,7 @@ def render_header(state: DashboardState) -> list[tuple[str, str]]:
         style = "class:filter_active" if state.filter_name == name else "class:filter"
         parts.append((style, FILTER_LABELS[name]))
         parts.append(("", "  "))
-    mock_style = "class:filter_active" if state.show_mock else "class:filter"
-    mock_label = "M REAL+MOCK" if state.show_mock else "M REAL only"
-    parts.append((mock_style, mock_label))
     if state.search_query and not state.search_active:
-        parts.append(("", "  "))
         parts.append(("class:filter_active", f'/{state.search_query}'))
     return parts
 
@@ -690,7 +752,16 @@ def render_footer(state: DashboardState) -> list[tuple[str, str]]:
 
 
 def render_key_hints(state: DashboardState) -> list[tuple[str, str]]:
-    return [("class:keybar", KEY_HINTS)]
+    col = "  "
+    line1 = f"NAVIGATE{col}       STATUS{col}          ACTIONS"
+    line2 = f"j/k row {col}  a applied    {col}  e eval   c cv   o outreach"
+    line3 = f"h/l pane{col}  x skipped    {col}  p apply  r reload   ? help  q quit"
+    line4 = f"/ search{col}  i interview  {col}  1-0 tabs"
+    line5 = f"        {col}  c callback   {col}"
+    line6 = f"        {col}  f sponsor❌   {col}"
+    line7 = f"        {col}  r rejected   {col}"
+    hints = "\n".join([line1, line2, line3, line4, line5, line6, line7])
+    return [("class:keybar", hints)]
 
 
 def render_pet(state: DashboardState) -> list[tuple[str, str]]:
@@ -702,17 +773,21 @@ def render_help() -> list[tuple[str, str]]:
     lines = [
         ("class:title", "Cockpit Help\n"),
         ("", "Navigation\n"),
-        ("", "  j / down     move down in the Jobs list\n"),
-        ("", "  k / up       move up in the Jobs list\n"),
-        ("", "  h / left     focus Jobs ← Evaluation ← Details\n"),
-        ("", "  l / right    focus Jobs → Evaluation → Details\n"),
-        ("", "  m            toggle REAL-only vs REAL+MOCK\n"),
-        ("", "  pageup/down  jump Jobs, or scroll Evaluation/Details\n"),
-        ("", "  home / end   jump to first/last row\n\n"),
+        ("", "  j/k / arrows   move up/down in Jobs list\n"),
+        ("", "  h/l / ←→       switch pane focus\n"),
+        ("", "  pageup/down    jump rows or scroll pane\n"),
+        ("", "  home / end     first / last row\n"),
+        ("", "  1-0            switch filter tab\n"),
+        ("", "  /              search (Esc to clear)\n\n"),
+        ("", "Status  (all auto-advance to next row)\n"),
+        ("", "  a  applied        x  skipped\n"),
+        ("", "  i  interview      c  callback\n"),
+        ("", "  f  sponsorship_fail\n"),
+        ("", "  r  rejected\n\n"),
         ("", "Actions\n"),
-        ("", "  e open eval   c open cv   o open outreach   p apply\n"),
-        ("", "  u evaluated   v cv_ready  a applied         x skipped\n"),
-        ("", "  1-5 filters   m toggle MOCK   r reload      q quit   ? close help\n"),
+        ("", "  e  open eval      c  open cv\n"),
+        ("", "  o  open outreach  p  apply\n"),
+        ("", "  R  reload         ?  close help   q  quit\n"),
     ]
     return lines
 
@@ -860,15 +935,24 @@ def build_dashboard_app(state: DashboardState) -> Application:
             state.message = "Help overlay closed."
             event.app.invalidate()
 
-    for key, filter_name in zip(["1", "2", "3", "4", "5"], FILTER_OPTIONS):
+    for key, filter_name in zip(["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"], FILTER_OPTIONS):
         @bindings.add(key)
         def _set_filter(event, filter_name=filter_name) -> None:
             state.set_filter(filter_name)
             event.app.invalidate()
 
-    @bindings.add("r")
+    @bindings.add("R")
     def _reload(event) -> None:
         state.reload()
+        event.app.invalidate()
+
+    @bindings.add("r")
+    def _set_rejected(event) -> None:
+        if state.search_active:
+            state.search_query += "r"
+            event.app.invalidate()
+            return
+        state.set_status("rejected", auto_advance=True)
         event.app.invalidate()
 
     @bindings.add("m")
@@ -925,10 +1009,14 @@ def build_dashboard_app(state: DashboardState) -> Application:
         state.message = "Apply cancelled."
         event.app.invalidate()
 
-    for key, status in STATUS_ACTIONS.items():
+    for key, (status, advance) in STATUS_ACTIONS.items():
         @bindings.add(key)
-        def _set_status(event, status=status) -> None:
-            state.set_status(status)
+        def _set_status(event, status=status, advance=advance) -> None:
+            if state.search_active:
+                state.search_query += key
+                event.app.invalidate()
+                return
+            state.set_status(status, auto_advance=advance)
             event.app.invalidate()
 
     @bindings.add("e")
@@ -942,7 +1030,7 @@ def build_dashboard_app(state: DashboardState) -> Application:
         event.app.invalidate()
         run_in_terminal(lambda: open_path_in_terminal(record.eval_path))
 
-    @bindings.add("c")
+    @bindings.add("C")
     def _open_cv(event) -> None:
         record = state.current_record()
         if record is None or not record.cv_path:
@@ -1004,11 +1092,12 @@ def build_dashboard_app(state: DashboardState) -> Application:
                     Frame(Window(content=table_control, wrap_lines=False), title="Jobs", width=Dimension(weight=5)),
                     Frame(Window(content=evaluation_control, wrap_lines=True), title="Evaluation", width=Dimension(weight=4)),
                     Frame(Window(content=detail_control, wrap_lines=True), title="Details", width=Dimension(weight=5)),
-                ]
+                ],
+                height=Dimension(weight=1),
             ),
-            Window(content=keybar_control, height=1),
+            Window(content=pet_control, height=10),
+            Window(content=keybar_control, height=7),
             Window(content=footer_control, height=1),
-            Window(content=pet_control, height=4),
         ]
     )
 
@@ -1068,7 +1157,7 @@ def build_dashboard_app(state: DashboardState) -> Application:
 def main() -> None:
     parser = argparse.ArgumentParser(description="ds-radar interactive dashboard")
     parser.add_argument("--sort", default="date", choices=["date", "grade", "company", "score"])
-    parser.add_argument("--filter", default="all", choices=FILTER_OPTIONS)
+    parser.add_argument("--filter", default="all", choices=list(FILTER_OPTIONS))
     parser.add_argument("--print-startup", action="store_true", help="Print startup log before launching")
     parser.add_argument("--dump-row", type=int, default=None, metavar="INDEX", help="Print one row model and exit")
     parser.add_argument("--apply-dry-run", action="store_true", help="Run apply.py --dry-run when pressing p (default)")
@@ -1096,8 +1185,8 @@ def main() -> None:
 
     mode = "DRY-RUN" if state.apply_dry_run else "LIVE"
     state.message = (
-        f"Keys: 1-5 filters | j/k or arrows move | h/l switch pane | "
-        f"pageup/down scroll panes | m toggle MOCK | p apply ({mode}) | u/v/a/x set status | q quit"
+        f"Keys: 1-0 filters | j/k move | h/l pane | a/x/i/c/f/r status (auto-advance) | "
+        f"e/c/o open | p apply ({mode}) | R reload | q quit | ? help"
     )
     app = build_dashboard_app(state)
     try:

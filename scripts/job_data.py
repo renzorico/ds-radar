@@ -35,7 +35,10 @@ TRACKER_HEADER = [
 ]
 
 GRADE_ORDER = {"A": 0, "B": 1, "C": 2, "D": 3, "F": 4}
-FILTER_OPTIONS = ["all", "b_plus", "sponsorship_fail", "linkedin_only", "ready"]
+FILTER_OPTIONS = [
+    "all", "linkedin", "boards", "b_plus", "ready",
+    "applied", "interview", "callback", "rejected", "sponsorship_fail",
+]
 
 
 @dataclass
@@ -436,13 +439,23 @@ def sort_records(records: list[JobRecord], sort_by: str) -> list[JobRecord]:
 
 def filter_records(records: list[JobRecord], filter_name: str) -> list[JobRecord]:
     if filter_name == "b_plus":
-        return [record for record in records if grade_passes(record.grade, "B+")]
-    if filter_name == "sponsorship_fail":
-        return [record for record in records if record.spons == "FAIL"]
-    if filter_name == "linkedin_only":
-        return [record for record in records if record.source == "linkedin"]
+        return [r for r in records if grade_passes(r.grade, "B+")]
+    if filter_name == "linkedin":
+        return [r for r in records if r.source == "linkedin"]
+    if filter_name == "boards":
+        return [r for r in records if r.source and r.source != "linkedin"]
     if filter_name == "ready":
-        return [record for record in records if record.ready_to_apply]
+        return [r for r in records if r.ready_to_apply and grade_passes(r.grade, "B+")]
+    if filter_name == "applied":
+        return [r for r in records if (r.status or "").lower() == "applied"]
+    if filter_name == "interview":
+        return [r for r in records if (r.status or "").lower() == "interview"]
+    if filter_name == "callback":
+        return [r for r in records if (r.status or "").lower() == "callback"]
+    if filter_name == "rejected":
+        return [r for r in records if (r.status or "").lower() == "rejected"]
+    if filter_name == "sponsorship_fail":
+        return [r for r in records if r.spons == "FAIL"]
     return list(records)
 
 
