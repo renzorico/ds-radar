@@ -2,14 +2,18 @@
 ds-radar scanner
 Usage: python scan.py
 
-Reads target companies from profile/target-companies.yaml, discovers live job
-listings (Greenhouse: real Playwright scraping; others: mock), deduplicates
-against scan-history.tsv, and writes new URLs to scan-queue.txt.
-Does NOT modify scan-history.tsv — that is evaluate.py's responsibility.
+Discovers job URLs from two sources:
+  1. ATS boards defined in profile/target-companies.yaml
+  2. LinkedIn CSV files dropped into csv-inbox/  (Detail URL column)
+
+Deduplicates against scan-history.tsv + tracker.tsv, liveness-checks ATS URLs,
+and writes new URLs to scan-queue.txt.
+Processed CSVs are moved to csv-inbox/processed/ so they are never re-imported.
 """
 
 import csv
 import re
+import shutil
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -25,8 +29,11 @@ except ImportError:
 REPO_ROOT = Path(__file__).resolve().parent.parent
 TARGET_COMPANIES = REPO_ROOT / "profile" / "target-companies.yaml"
 SCAN_HISTORY = REPO_ROOT / "scan-history.tsv"
+TRACKER = REPO_ROOT / "tracker.tsv"
 SCAN_QUEUE = REPO_ROOT / "scan-queue.txt"
 ERRORS_LOG = REPO_ROOT / "evals" / "errors.log"
+CSV_INBOX = REPO_ROOT / "csv-inbox"
+CSV_PROCESSED = CSV_INBOX / "processed"
 
 GREENHOUSE_TIMEOUT_MS = 15_000
 
@@ -47,11 +54,49 @@ def load_companies() -> list[dict]:
 
 
 def load_seen_urls() -> set[str]:
-    if not SCAN_HISTORY.exists():
-        return set()
-    with SCAN_HISTORY.open(newline="") as f:
-        reader = csv.DictReader(f, delimiter="\t")
-        return {row["url"].strip() for row in reader if row.get("url")}
+    """Return all URLs already in scan-history or tracker (both sources)."""
+    seen: set[str] = set()
+    for path in (SCAN_HISTORY, TRACKER):
+        if not path.exists():
+            continue
+        with path.open(newline="", encoding="utf-8") as f:
+            reader = csv.DictReader(f, delimiter="\t")
+            for row in reader:
+                if row.get("url"):
+                    seen.add(row["url"].strip())
+    return seen
+
+
+# ── LinkedIn CSV inbox ────────────────────────────────────────────────────────
+
+def ingest_csv_inbox(seen_urls: set[str]) -> list[str]:
+    """Read all LinkedIn CSVs from csv-inbox/, return new URLs, archive processed files."""
+    CSV_INBOX.mkdir(exist_ok=True)
+    CSV_PROCESSED.mkdir(exist_ok=True)
+
+    csv_files = sorted(CSV_INBOX.glob("*.csv"))
+    if not csv_files:
+        return []
+
+    new_urls: list[str] = []
+    for csv_path in csv_files:
+        try:
+            with csv_path.open(newline="", encoding="utf-8-sig") as f:
+                reader = csv.DictReader(f)
+                if "Detail URL" not in (reader.fieldnames or []):
+                    print(f"  [CSV] {csv_path.name}: no 'Detail URL' column — skipping")
+                    continue
+                urls = [row["Detail URL"].strip() for row in reader if row.get("Detail URL", "").strip()]
+            fresh = [u for u in urls if u not in seen_urls]
+            new_urls.extend(fresh)
+            seen_urls.update(fresh)  # prevent cross-file duplication
+            dest = CSV_PROCESSED / csv_path.name
+            shutil.move(str(csv_path), str(dest))
+            print(f"  [CSV] {csv_path.name}: {len(urls)} rows, {len(fresh)} new → archived")
+        except Exception as exc:
+            print(f"  [CSV] {csv_path.name}: error reading — {exc}")
+
+    return new_urls
 
 
 def log_error(company_name: str, url: str, error: str) -> None:
@@ -197,26 +242,34 @@ def discover_jobs(company: dict) -> list[str]:
 # ── Main ─────────────────────────────────────────────────────────────────────
 
 def main() -> None:
-    companies = load_companies()
     seen_urls = load_seen_urls()
 
-    all_new_urls: list[str] = []
-    rows: list[tuple[str, int, int, int]] = []  # (name, found, new, seen)
-
+    # ── Source 1: LinkedIn CSV inbox ─────────────────────────────────────────
     print()
+    print("[SCAN] CSV inbox")
+    csv_urls = ingest_csv_inbox(seen_urls)
+    print(f"       {len(csv_urls)} new LinkedIn URLs from CSVs")
+
+    # ── Source 2: ATS boards ──────────────────────────────────────────────────
+    print()
+    print("[SCAN] ATS boards")
+    companies = load_companies()
+    ats_urls: list[str] = []
     for company in companies:
-        print(f"[SCAN] Scanning {company['name']}...", end=" ", flush=True)
+        print(f"  {company['name']}...", end=" ", flush=True)
         discovered = discover_jobs(company)
-        new_urls = [u for u in discovered if u not in seen_urls]
-        already_seen = len(discovered) - len(new_urls)
-        all_new_urls.extend(new_urls)
-        rows.append((company["name"], len(discovered), len(new_urls), already_seen))
-        print(f"→ {len(discovered)} found, {len(new_urls)} new, {already_seen} already seen")
+        new = [u for u in discovered if u not in seen_urls]
+        seen_urls.update(new)
+        ats_urls.extend(new)
+        print(f"→ {len(discovered)} found, {len(new)} new, {len(discovered)-len(new)} seen")
+    print(f"       {len(ats_urls)} new ATS URLs")
 
-    print(f"\n[SCAN] Total: {len(all_new_urls)} new URLs before liveness check")
+    # ── Liveness check (ATS only; LinkedIn URLs are live by definition) ───────
+    all_candidate_urls = csv_urls + ats_urls
+    print(f"\n[SCAN] {len(all_candidate_urls)} total new URLs — liveness check on ATS ({len(ats_urls)})")
 
-    live_urls: list[str] = []
-    for url in all_new_urls:
+    live_urls: list[str] = list(csv_urls)  # LinkedIn URLs bypass liveness
+    for url in ats_urls:
         if "mock" in url or "example.com" in url:
             live_urls.append(url)
             continue
@@ -226,18 +279,23 @@ def main() -> None:
         else:
             log_error("liveness", url, reason)
 
-    print(f"[LIVENESS] {len(live_urls)}/{len(all_new_urls)} URLs passed")
+    print(f"[LIVENESS] {len(ats_urls) - (len(live_urls) - len(csv_urls))}/{len(ats_urls)} ATS URLs failed liveness")
 
-    # Write scan-queue.txt (overwrite each run)
+    # ── Write scan-queue.txt (overwrite each run) ─────────────────────────────
     SCAN_QUEUE.write_text(
         "\n".join(live_urls) + ("\n" if live_urls else ""),
         encoding="utf-8",
     )
 
+    sep = "─" * 45
+    print(f"\n{sep}")
+    print(f"  LinkedIn CSV:    {len(csv_urls)}")
+    print(f"  ATS boards:      {len(ats_urls)}")
+    print(f"  Queue total:     {len(live_urls)}")
+    print(sep)
     if live_urls:
-        print()
-        print("Run: python evaluate.py <url>  OR  python pipeline.py to process all")
-    print()
+        print("  Next: python scripts/pipeline.py --parallel 3")
+    print(f"{sep}\n")
 
 
 if __name__ == "__main__":

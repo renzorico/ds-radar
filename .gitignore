@@ -23,6 +23,7 @@ evals_backup/
 __pycache__/
 *.pyc
 *.pyo
+*.py.bak
 .venv/
 venv/
 *.egg-info/
@@ -42,3 +43,6 @@ web/package-lock.json
 web/next-env.d.ts
 .dashboard.state.json
 backup_*/
+
+# LinkedIn CSV inbox
+csv-inbox/

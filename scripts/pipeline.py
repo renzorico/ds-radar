@@ -129,6 +129,7 @@ def main() -> None:
 
     resume = "--resume" in sys.argv
     retry_failed = "--retry-failed" in sys.argv
+    no_outreach = "--no-outreach" in sys.argv
 
     # Apply resume filter
     if resume:
@@ -200,19 +201,20 @@ def main() -> None:
             except Exception as e:
                 print(f"  → Oferta error for {company}: {e}")
 
-            try:
-                eval_data = _contacto_mod.get_eval_rich(url)
-                oferta_hooks = _contacto_mod._find_oferta_hooks(company)
-                messages, _, _ = _contacto_mod.generate_outreach_with_claude(eval_data, oferta_hooks, None)
-                if messages is None:
-                    messages = _contacto_mod.build_outreach_template(company, title, grade, None)
-                    source = "TEMPLATE_FALLBACK"
-                else:
-                    source = "CLAUDE"
-                _contacto_mod.write_outreach_report(messages, eval_data, url, source, None)
-                print(f"  → Outreach: {company}")
-            except Exception as e:
-                print(f"  → Outreach error for {company}: {e}")
+            if not no_outreach:
+                try:
+                    eval_data = _contacto_mod.get_eval_rich(url)
+                    oferta_hooks = _contacto_mod._find_oferta_hooks(company)
+                    messages, _, _ = _contacto_mod.generate_outreach_with_claude(eval_data, oferta_hooks, None)
+                    if messages is None:
+                        messages = _contacto_mod.build_outreach_template(company, title, grade, None)
+                        source = "TEMPLATE_FALLBACK"
+                    else:
+                        source = "CLAUDE"
+                    _contacto_mod.write_outreach_report(messages, eval_data, url, source, None)
+                    print(f"  → Outreach: {company}")
+                except Exception as e:
+                    print(f"  → Outreach error for {company}: {e}")
 
         if grade == "A":
             counts["A"] += 1
@@ -281,18 +283,16 @@ def main() -> None:
     # Step 5 — summary
     sep = "─" * 45
     print(f"\n{sep}")
-    print("  DS-RADAR PIPELINE COMPLETE — MOCK MODE")
+    print("  DS-RADAR PIPELINE COMPLETE")
     print(sep)
     print(f"  URLs processed:     {total}")
-    print(f"  A grades:           {counts['A']} → applied")
-    print(f"  B grades:           {counts['B']} → applied")
+    print(f"  A grades:           {counts['A']} → cv_ready")
+    print(f"  B grades:           {counts['B']} → cv_ready")
     print(f"  C/D/F grades:       {counts['cdf']} → skipped")
     print(f"  CVs generated:      {counts['pdfs']}")
     print(f"  Already in tracker: {counts['already_tracked']} (skipped)")
     print(sep)
-    print("  Next: keep profile/profile.yaml up to date with your real CV facts")
-    print("        add ANTHROPIC_API_KEY to .env")
-    print("        run python pipeline.py for real evaluations")
+    print("  Next: open dashboard to review → python scripts/dashboard.py")
     print(f"{sep}\n")
 
 
