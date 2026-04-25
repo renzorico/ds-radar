@@ -59,61 +59,178 @@ COMPANY_DESCRIPTIONS: dict[str, str] = {
 }
 
 PROJECT_DETAILS: dict[str, dict[str, str]] = {
+    "legalize-co": {
+        "name": "legalize-co",
+        "tech": "Python",
+        "repo_url": "https://github.com/renzorico/legalize-co",
+        "summary": (
+            "Open-source legal data project in Python, extending the portfolio toward public-interest infrastructure "
+            "and structured document pipelines."
+        ),
+    },
     "ds-radar": {
         "name": "ds-radar",
         "tech": "Python, OpenAI API, Playwright",
         "repo_url": "https://github.com/renzorico/ds-radar",
         "summary": (
-            "AI-powered job search pipeline that scans roles, evaluates fit, generates tailored CVs, and tracks "
-            "applications."
+            "Built a four-stage agentic pipeline that scans ATS boards, filters for sponsorship fit, scores roles "
+            "across ten dimensions, and generates tailored CVs and application artifacts from a single workflow."
         ),
     },
     "no botes tu voto": {
         "name": "No botes tu voto",
-        "tech": "FastAPI, Next.js, TypeScript, Railway",
+        "tech": "Python, FastAPI, product delivery",
         "repo_url": "https://github.com/renzorico/colombia-matcher",
+        "website_url": "https://nobotestuvoto.vercel.app/",
         "summary": (
-            "Civic-tech platform for election guidance, described in the profile as supporting 10,000+ users."
+            "Shipped a civic-tech platform that matched users to parties based on policy alignment, combining NLP, "
+            "scoring logic, and product delivery for an audience of 10,000+ users."
         ),
     },
     "the london bible": {
         "name": "The London Bible",
-        "tech": "Python, GeoPandas, Leaflet",
+        "tech": "Python, GeoPandas, Streamlit",
         "repo_url": "https://github.com/renzorico/the-london-bible",
-        "summary": "Interactive London data atlas built from public datasets and geospatial analysis.",
+        "website_url": "https://the-london-bible.netlify.app/",
+        "summary": (
+            "Built an interactive London data atlas by aggregating public datasets across transport, affordability, "
+            "green space, and neighbourhood indicators into a decision-support tool."
+        ),
     },
     "adcc universe": {
         "name": "ADCC Universe",
-        "tech": "React, TypeScript, Sigma.js",
+        "tech": "Python, network analysis, interactive visualisation",
         "repo_url": "https://github.com/renzorico/bjj-universe",
-        "summary": "Grappling competition network graph and interactive relationship explorer.",
+        "website_url": "https://renzorico.github.io/bjj-universe/",
+        "summary": (
+            "Developed an interactive network graph explorer that maps athlete relationships and match histories, "
+            "turning dense competition data into a navigable frontend experience."
+        ),
     },
     "un speeches nlp": {
         "name": "UN Speeches NLP",
         "tech": "Python, scikit-learn, Streamlit, BigQuery",
         "repo_url": "https://github.com/renzorico/speeches-at-UN",
-        "summary": "NLP pipeline analysing 8,000+ UN General Debate speeches across time.",
+        "website_url": "https://speeches-at-un.streamlit.app/",
+        "summary": (
+            "Analysed 8,000+ UN General Debate speeches with topic modelling and temporal analysis to surface how "
+            "global priorities shifted over time, then packaged the findings in an interactive app."
+        ),
     },
 }
 
 SKILL_GROUPS = {
-    "Languages": ["Python (data + ML).", "SQL.", "JavaScript and TypeScript."],
-    "Data/ML": [
+    "Languages": ["Python (data + ML).", "SQL.", "JavaScript."],
+    "Data & ML": [
         "Pandas / NumPy / scikit-learn.",
         "TensorFlow/Keras.",
+        "Feature engineering.",
+        "Statistical analysis.",
+        "Experimentation and A/B testing.",
         "NLP and UMAP.",
         "LLMs and agentic AI systems.",
     ],
-    "Web/Cloud/Tools": [
-        "FastAPI.",
+    "Data Engineering": [
         "BigQuery and GCP.",
         "Docker.",
-        "React.",
+        "Playwright.",
+        "API integration.",
+        "Web scraping.",
+    ],
+    "Product Engineering": [
+        "FastAPI.",
         "Vercel and Railway.",
         "Streamlit.",
+        "GeoPandas and geospatial analysis.",
+    ],
+    "Tools & Workflow": [
         "Git.",
+        "Teaching and data/ML instruction.",
         "Linux / CLI-focused workflows.",
     ],
+}
+
+ARCHETYPE_CV_CONFIG: dict[str, dict[str, object]] = {
+    "ds-product": {
+        "title_line": "Data Scientist | Product Analytics & ML",
+        "summary_seed": [
+            "Data scientist working across Python, SQL, experimentation, and applied machine learning through teaching and freelance product delivery.",
+            "Best positioned for product-facing roles that combine analytics, feature engineering, stakeholder communication, and decision-support systems."
+        ],
+        "skill_group_order": ["Languages", "Data & ML", "Data Engineering", "Product Engineering", "Tools & Workflow"],
+        "skill_priority": [
+            "Python (data + ML).", "SQL.", "Statistical analysis.", "Experimentation and A/B testing.",
+            "Feature engineering.", "Pandas / NumPy / scikit-learn.", "BigQuery and GCP.",
+            "API integration.", "FastAPI.", "Streamlit."
+        ],
+        "bullet_emphasis": "Emphasise experimentation, product metrics, feature engineering, stakeholder communication, dashboard thinking, and translating ambiguous business questions into decision-support outputs.",
+    },
+    "data-analyst": {
+        "title_line": "Data Analyst | Analytics Specialist",
+        "summary_seed": [
+            "Data-focused analyst with hands-on experience in Python, SQL, dashboards, reporting, and decision-support workflows across teaching and freelance delivery.",
+            "Best positioned for roles centered on business analysis, KPI tracking, dashboarding, stakeholder support, and turning messy data into clear operational insight."
+        ],
+        "skill_group_order": ["Languages", "Data & ML", "Data Engineering", "Product Engineering", "Tools & Workflow"],
+        "skill_priority": [
+            "SQL.", "Python (data + ML).", "Statistical analysis.", "Pandas / NumPy / scikit-learn.",
+            "Experimentation and A/B testing.", "BigQuery and GCP.", "Streamlit.", "API integration."
+        ],
+        "bullet_emphasis": "Emphasise dashboards, reporting, KPI tracking, stakeholder support, analytical clarity, and turning data into clear recommendations and operational insight.",
+    },
+    "analytics-engineer": {
+        "title_line": "Analytics Engineer | Data Scientist",
+        "summary_seed": [
+            "Analytics-oriented data scientist with hands-on experience in Python, SQL, dashboards, data modeling, and business-facing decision support.",
+            "Best positioned for roles that sit between analytics, data infrastructure, reporting, and stakeholder enablement."
+        ],
+        "skill_group_order": ["Languages", "Data Engineering", "Data & ML", "Product Engineering", "Tools & Workflow"],
+        "skill_priority": [
+            "SQL.", "Python (data + ML).", "BigQuery and GCP.", "API integration.", "Web scraping.",
+            "Statistical analysis.", "Pandas / NumPy / scikit-learn.", "Streamlit.", "FastAPI."
+        ],
+        "bullet_emphasis": "Emphasise SQL, metrics layers, dashboards, reporting workflows, analytical reliability, and enabling teams with clearer data products.",
+    },
+    "data-engineer": {
+        "title_line": "Data Engineer | Analytics Engineer",
+        "summary_seed": [
+            "Python-first data builder with experience in pipelines, APIs, scraping, structured datasets, and production-oriented analytics workflows.",
+            "Best positioned for roles focused on data movement, transformation, reliability, and the systems that support analytics and ML use cases."
+        ],
+        "skill_group_order": ["Languages", "Data Engineering", "Data & ML", "Product Engineering", "Tools & Workflow"],
+        "skill_priority": [
+            "Python (data + ML).", "SQL.", "BigQuery and GCP.", "Docker.", "Playwright.",
+            "API integration.", "Web scraping.", "FastAPI.", "Git."
+        ],
+        "bullet_emphasis": "Emphasise data pipelines, ingestion, automation, scraping, APIs, reproducible workflows, and turning messy inputs into usable structured datasets.",
+    },
+    "ml-engineer": {
+        "title_line": "Machine Learning Engineer | Data Scientist",
+        "summary_seed": [
+            "Machine-learning-oriented data scientist with hands-on experience in Python, feature engineering, model development, and applied NLP workflows.",
+            "Best positioned for roles that combine analytical rigor with production-minded ML delivery and close collaboration with product or engineering teams."
+        ],
+        "skill_group_order": ["Languages", "Data & ML", "Data Engineering", "Product Engineering", "Tools & Workflow"],
+        "skill_priority": [
+            "Python (data + ML).", "SQL.", "Pandas / NumPy / scikit-learn.", "TensorFlow/Keras.",
+            "Feature engineering.", "Statistical analysis.", "NLP and UMAP.", "BigQuery and GCP.",
+            "Docker.", "FastAPI."
+        ],
+        "bullet_emphasis": "Emphasise model-building workflows, feature engineering, NLP, experimentation, deployment-minded thinking, and collaboration needed to productionise high-value models.",
+    },
+    "ai-engineer": {
+        "title_line": "AI Engineer | Applied ML Engineer",
+        "summary_seed": [
+            "AI-focused data scientist building Python-based systems around LLMs, automation, decision support, and applied machine learning.",
+            "Best positioned for roles that combine agentic workflows, model-enabled products, and pragmatic engineering for real user or business outcomes."
+        ],
+        "skill_group_order": ["Languages", "Data & ML", "Data Engineering", "Product Engineering", "Tools & Workflow"],
+        "skill_priority": [
+            "Python (data + ML).", "SQL.", "LLMs and agentic AI systems.", "Pandas / NumPy / scikit-learn.",
+            "Feature engineering.", "API integration.", "Playwright.", "FastAPI.", "Docker."
+        ],
+        "bullet_emphasis": "Emphasise LLM workflows, automation, agentic systems, APIs, rapid prototyping, and applied ML work that drives concrete operational value.",
+    },
 }
 
 try:
@@ -195,6 +312,7 @@ def _project_record(item: str) -> dict[str, str]:
         "name": name,
         "summary": details.get("summary", item.strip()),
         "tech": details.get("tech", ""),
+        "website_url": details.get("website_url", ""),
         "repo_url": details.get("repo_url", ""),
     }
 
@@ -265,11 +383,12 @@ def parse_eval(eval_path: Path) -> dict:
 # ── Step 2: Load base CV ──────────────────────────────────────────────────────
 
 ARCHETYPE_PROJECT_ORDER: dict[str, list[str]] = {
-    "ds-product":         ["London Bible", "UN Speeches", "No botes", "ADCC", "ds-radar"],
-    "ml-engineer":        ["ds-radar", "UN Speeches", "London Bible", "ADCC", "No botes"],
-    "analytics-engineer": ["London Bible", "ADCC", "UN Speeches", "No botes", "ds-radar"],
-    "data-engineer":      ["ds-radar", "No botes", "UN Speeches", "London Bible", "ADCC"],
-    "ai-engineer":        ["ds-radar", "UN Speeches", "ADCC", "No botes", "London Bible"],
+    "ds-product":         ["legalize-co", "London Bible", "UN Speeches", "No botes", "ADCC", "ds-radar"],
+    "data-analyst":       ["London Bible", "No botes", "UN Speeches", "legalize-co", "ds-radar", "ADCC"],
+    "ml-engineer":        ["ds-radar", "legalize-co", "UN Speeches", "London Bible", "ADCC", "No botes"],
+    "analytics-engineer": ["London Bible", "legalize-co", "UN Speeches", "ADCC", "No botes", "ds-radar"],
+    "data-engineer":      ["legalize-co", "ds-radar", "No botes", "UN Speeches", "London Bible", "ADCC"],
+    "ai-engineer":        ["ds-radar", "legalize-co", "UN Speeches", "ADCC", "No botes", "London Bible"],
 }
 
 
@@ -310,6 +429,26 @@ def _unique(items: list[str]) -> list[str]:
     return ordered
 
 
+def _archetype_config(archetype: str) -> dict[str, object]:
+    return ARCHETYPE_CV_CONFIG.get(archetype, ARCHETYPE_CV_CONFIG["ds-product"])
+
+
+def _ordered_skills(items: list[str], priority: list[str]) -> list[str]:
+    priority_map = {item.rstrip(".").lower(): idx for idx, item in enumerate(priority)}
+    return sorted(
+        items,
+        key=lambda item: (priority_map.get(item.rstrip(".").lower(), len(priority_map)), items.index(item)),
+    )
+
+
+def _build_archetype_summary(archetype: str) -> str:
+    config = _archetype_config(archetype)
+    summary_seed = config.get("summary_seed", [])
+    if not isinstance(summary_seed, list):
+        return ""
+    return " ".join(str(sentence).strip() for sentence in summary_seed if str(sentence).strip())
+
+
 def load_profile_data() -> dict:
     if not PROFILE_PATH.exists():
         raise FileNotFoundError(f"Profile file not found: {PROFILE_PATH}")
@@ -334,20 +473,21 @@ def load_profile_data() -> dict:
     return profile
 
 
-def build_canonical_cv(profile: dict) -> str:
+def build_canonical_cv(profile: dict, archetype: str = "ds-product") -> str:
     identity = profile.get("identity", {}) or {}
     contact = profile.get("contact", {}) or {}
     tech = profile.get("tech_stack", {}) or {}
+    archetype_config = _archetype_config(archetype)
 
     name = identity.get("name", "Renzo Rico").strip()
     location = identity.get("location", "").strip()
-    role_title = DEFAULT_CANDIDATE_TITLE
+    role_title = str(archetype_config.get("title_line", DEFAULT_CANDIDATE_TITLE)).strip()
     contact_parts = [
         location,
-        contact.get("email", "").strip(),
         contact.get("phone", "").strip(),
-        contact.get("linkedin_url", "").strip(),
+        contact.get("email", "").strip(),
         GITHUB_PROFILE_URL,
+        contact.get("linkedin_url", "").strip(),
     ]
     meta_line = " | ".join(part for part in contact_parts if part)
 
@@ -356,36 +496,53 @@ def build_canonical_cv(profile: dict) -> str:
     project_items = [_project_record(str(item).strip()) for item in profile.get("projects", []) if str(item).strip()]
     strong_skills = [str(item).strip() for item in tech.get("strong_skills", []) if str(item).strip()]
     must_match = [str(item).strip() for item in tech.get("must_match_skills", []) if str(item).strip()]
-
-    summary_parts: list[str] = []
-    if location:
-        summary_parts.append(f"{role_title} based in {location}.")
-    if experience_items:
-        lead_role = experience_items[0]
-        lead_company = _first_non_empty([lead_role.get("company", ""), "recent employers"])
-        summary_parts.append(
-            f"Experience spans technical delivery across {lead_company} and freelance product work."
-        )
-    skill_summary = _compact_list(_unique(strong_skills[:4] + must_match), 6)
-    if skill_summary:
-        summary_parts.append(f"Core skills: {skill_summary}.")
+    summary_text = _build_archetype_summary(archetype)
 
     lines = [f"# {name}"]
     lines.extend(["", role_title])
     if meta_line:
         lines.extend(["", meta_line])
 
-    lines.extend(["", "## Summary", " ".join(summary_parts).strip()])
+    lines.extend(["", "## Summary", summary_text])
 
+    normalized_skills = {s.rstrip(".").lower() for s in strong_skills + must_match}
+    skill_group_order = archetype_config.get("skill_group_order", list(SKILL_GROUPS.keys()))
+    if not isinstance(skill_group_order, list):
+        skill_group_order = list(SKILL_GROUPS.keys())
+    skill_priority = archetype_config.get("skill_priority", [])
+    if not isinstance(skill_priority, list):
+        skill_priority = []
     skill_lines: list[str] = []
-    for label, items in SKILL_GROUPS.items():
-        available = [item for item in items if item in strong_skills or item.rstrip(".").lower() in {s.rstrip('.').lower() for s in strong_skills + must_match}]
+    for label in [str(group) for group in skill_group_order if str(group) in SKILL_GROUPS]:
+        items = SKILL_GROUPS[label]
+        available = [item for item in items if item.rstrip(".").lower() in normalized_skills]
+        available = _ordered_skills(available, [str(item) for item in skill_priority])
         if available:
             skill_lines.append(f"- **{label}:** {', '.join(available)}")
     if not skill_lines:
         skill_lines = [f"- **Core:** {', '.join(_unique(strong_skills or must_match))}"]
+
     lines.extend(["", "## Skills"])
     lines.extend(skill_lines)
+
+    if experience_items:
+        lines.extend(["", "## Experience"])
+        for experience in experience_items:
+            heading_bits = [experience.get("title", "").strip(), experience.get("company", "").strip()]
+            heading = " - ".join(part for part in heading_bits if part)
+            dates = experience.get("dates", "").strip()
+            location_text = experience.get("location", "").strip()
+            if dates:
+                heading = f"{heading} | {dates}" if heading else dates
+            lines.extend(["", f"### {heading}"])
+            if location_text:
+                lines.append(location_text)
+            if experience.get("company_description"):
+                lines.append(experience["company_description"])
+            lines.append(
+                "- Add role-relevant bullets grounded in the verified profile and job description, "
+                f"with emphasis on {str(archetype_config.get('bullet_emphasis', '')).strip()}"
+            )
 
     if project_items:
         lines.extend(["", "## Projects"])
@@ -394,23 +551,11 @@ def build_canonical_cv(profile: dict) -> str:
             if project.get("tech"):
                 project_heading += f" ({project['tech']})"
             lines.extend(["", project_heading])
-            if project.get("repo_url"):
-                lines.append(f"Repository: {project['repo_url']}")
+            project_url = project.get("website_url") or project.get("repo_url")
+            if project_url:
+                lines.append(f"Project: {project_url}")
             if project.get("summary"):
                 lines.append(f"- {project['summary']}")
-
-    if experience_items:
-        lines.extend(["", "## Experience"])
-        for experience in experience_items:
-            heading_bits = [experience.get("title", "").strip(), experience.get("company", "").strip()]
-            heading = " - ".join(part for part in heading_bits if part)
-            meta_bits = [experience.get("location", "").strip(), experience.get("dates", "").strip()]
-            lines.extend(["", f"### {heading}"])
-            if any(meta_bits):
-                lines.append(" | ".join(part for part in meta_bits if part))
-            if experience.get("company_description"):
-                lines.append(experience["company_description"])
-            lines.append("- Add role-relevant bullets grounded in the verified profile and job description.")
 
     if education_items:
         lines.extend(["", "## Education"])
@@ -426,29 +571,44 @@ def build_canonical_cv(profile: dict) -> str:
                 line += f" ({dates})"
             lines.append(line)
 
+    lines.extend([
+        "",
+        "## Interests",
+        "- Brazilian jiu-jitsu athlete",
+        "- Open source and Linux ecosystems",
+        "- Chess & puzzles",
+    ])
+
     return "\n".join(lines).strip() + "\n"
 
 
-def build_profile_fact_block(profile: dict) -> str:
+def build_profile_fact_block(profile: dict, archetype: str = "ds-product") -> str:
     identity = profile.get("identity", {}) or {}
     contact = profile.get("contact", {}) or {}
     tech = profile.get("tech_stack", {}) or {}
+    archetype_config = _archetype_config(archetype)
     experience_items = [_parse_experience_item(str(item).strip()) for item in profile.get("experience", []) if str(item).strip()]
     education_items = [_parse_education_item(str(item).strip()) for item in profile.get("education", []) if str(item).strip()]
     project_items = [_project_record(str(item).strip()) for item in profile.get("projects", []) if str(item).strip()]
+    group_order = archetype_config.get("skill_group_order", list(SKILL_GROUPS.keys()))
+    if not isinstance(group_order, list):
+        group_order = list(SKILL_GROUPS.keys())
     skill_lines = [
-        f"- {label}: {', '.join(items)}"
-        for label, items in SKILL_GROUPS.items()
+        f"- {label}: {', '.join(SKILL_GROUPS[label])}"
+        for label in [str(group) for group in group_order if str(group) in SKILL_GROUPS]
     ]
     lines = [
         f"- name: {identity.get('name', '').strip()}",
-        f"- target_title: {DEFAULT_CANDIDATE_TITLE}",
+        f"- target_title: {str(archetype_config.get('title_line', DEFAULT_CANDIDATE_TITLE)).strip()}",
+        f"- selected_archetype: {archetype}",
+        f"- archetype_summary_seed: {_build_archetype_summary(archetype)}",
+        f"- archetype_bullet_emphasis: {str(archetype_config.get('bullet_emphasis', '')).strip()}",
         f"- location: {identity.get('location', '').strip()}",
         f"- email: {contact.get('email', '').strip()}",
         f"- phone: {contact.get('phone', '').strip()}",
         f"- linkedin: {contact.get('linkedin_url', '').strip()}",
         f"- github: {GITHUB_PROFILE_URL}",
-        "- recruiter_priorities: qualifications, similar experience, visible GitHub profile, visible repo links, skimmable XYZ bullets, education last",
+        "- recruiter_priorities: qualifications, similar experience, visible project links, skimmable XYZ bullets, education last",
         "- experience:",
     ]
     for item in experience_items:
@@ -462,7 +622,8 @@ def build_profile_fact_block(profile: dict) -> str:
     for item in project_items[:5]:
         lines.append(
             "  - "
-            f"name={item.get('name', '')}; repo_url={item.get('repo_url', '') or 'n/a'}; "
+            f"name={item.get('name', '')}; website_url={item.get('website_url', '') or 'n/a'}; "
+            f"repo_url={item.get('repo_url', '') or 'n/a'}; "
             f"tech={item.get('tech', '') or 'n/a'}; summary={item.get('summary', '')}"
         )
     lines.append("- education:")
@@ -491,19 +652,23 @@ Rewrite the CV below tailored to the job description provided.
 - Inject important JD keywords naturally — no keyword stuffing.
 - Rewrite the professional summary as 2 sentences: sentence 1 grounds the candidate in their current work; sentence 2 connects it forward to this role ({role} at {company}). Avoid generic phrases like "passionate about" or "seeking opportunities".
 - Keep the same sections as the canonical CV unless there is a strong reason to drop one.
+- Treat the canonical CV as the selected archetype template. Preserve its title line, skill emphasis, project ordering logic, and overall positioning unless the JD creates a strong reason to adjust within that archetype.
 
 === SECTION ORDER (follow exactly) ===
 1. Contact / meta line (name already in H1 header — do not repeat it)
 2. Summary (2 sentences)
-3. Experience
-4. Projects
-5. Skills
+3. Skills
+4. Experience
+5. Projects
 6. Education
 
 === FORMATTING RULES ===
 - Output a complete CV in GitHub-flavoured Markdown only. No preamble, no explanation, no code fences.
-- Every bullet under Experience and Projects must follow the XYZ pattern: "Accomplished [X] by doing [Y], resulting in [Z]." Use real numbers from the profile where available.
-- Include the GitHub URL for each project where the profile provides one. Format: (github.com/...) inline after the project name.
+- Every bullet under Experience and Projects must follow the Google XYZ formula: "Accomplished [X] by doing [Y], resulting in [Z]." Use real numbers from the profile where available.
+- Keep the title line aligned with the selected archetype while still matching the job naturally.
+- Put dates on the same line as each Experience heading using the format: `### Title - Company | Dates`.
+- Put location on the next line only if useful.
+- Use the project website URL when one is provided in the profile facts; otherwise use the GitHub URL. Format the chosen link inline after the project name.
 - For each Experience entry, add a 1-sentence company blurb in italics below the job title line if the company is well-known enough to describe (skip if freelance or self-employed).
 - Do not add a page-count note or any meta-commentary.
 
@@ -657,9 +822,6 @@ def render_cv_html(cv_markdown: str, company: str, role: str) -> str:
         for line in meta_lines
     )
     title_name = name or "Curriculum Vitae"
-    role_line = html.escape(role)
-    company_line = html.escape(company)
-
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -710,15 +872,16 @@ def render_cv_html(cv_markdown: str, company: str, role: str) -> str:
       color: var(--accent);
       letter-spacing: -0.02em;
     }}
-    .target-role {{
-      margin: 0 0 8px;
-      font-size: 9.5pt;
-      color: var(--muted);
-    }}
     .meta p {{
       margin: 0 0 2px;
       font-size: 9.25pt;
       color: var(--muted);
+    }}
+    .meta p:first-child {{
+      font-size: 10pt;
+      font-weight: 600;
+      color: var(--accent);
+      margin-bottom: 4px;
     }}
     h2 {{
       margin: 14px 0 6px;
@@ -738,6 +901,7 @@ def render_cv_html(cv_markdown: str, company: str, role: str) -> str:
       margin: 0 0 7px;
       orphans: 3;
       widows: 3;
+      text-align: justify;
     }}
     ul {{
       margin: 0 0 8px 18px;
@@ -746,6 +910,7 @@ def render_cv_html(cv_markdown: str, company: str, role: str) -> str:
     li {{
       margin: 0 0 4px;
       page-break-inside: avoid;
+      text-align: justify;
     }}
     hr {{
       display: none;
@@ -763,7 +928,6 @@ def render_cv_html(cv_markdown: str, company: str, role: str) -> str:
   <main>
     <header>
       <h1>{html.escape(title_name)}</h1>
-      <p class="target-role">Tailored CV for {company_line} | {role_line}</p>
       <div class="meta">{meta_html}</div>
     </header>
     {body_html}
@@ -820,12 +984,13 @@ def generate_pdf(eval_path: "Path | str") -> str:
 
     parsed = parse_eval(eval_path)
     profile = load_profile_data()
+    archetype = parsed.get("archetype", "ds-product")
     profile["projects"] = reorder_projects_for_archetype(
-        profile.get("projects", []), parsed.get("archetype", "ds-product")
+        profile.get("projects", []), archetype
     )
-    print(f"[ARCHETYPE] {parsed.get('archetype', 'ds-product')} — projects reordered")
-    base_cv = build_canonical_cv(profile)
-    profile_facts = build_profile_fact_block(profile)
+    print(f"[ARCHETYPE] {archetype} — archetype overlay applied")
+    base_cv = build_canonical_cv(profile, archetype=archetype)
+    profile_facts = build_profile_fact_block(profile, archetype=archetype)
 
     print(
         f"CV_REWRITE company={parsed['company']} grade={parsed['grade']} "

@@ -435,6 +435,8 @@ _ARCHETYPE_KEYWORDS: dict[str, list[str]] = {
                             "ingestion", "orchestration", "warehouse"],
     "analytics-engineer":  ["dbt", "data warehouse", "sql", "looker", "tableau", "power bi",
                             "analytical", "reporting", "metrics layer"],
+    "data-analyst":        ["data analyst", "business intelligence", "bi", "dashboard", "reporting",
+                            "excel", "insights", "visualisation", "analysis", "kpi"],
     "ds-product":          ["product", "growth", "experimentation", "a/b test", "metrics",
                             "analytics", "insight", "dashboard", "stakeholder"],
 }
@@ -443,7 +445,7 @@ _ARCHETYPE_KEYWORDS: dict[str, list[str]] = {
 def detect_archetype(title: str, jd_text: str) -> str:
     """Keyword-based archetype classifier. No API call.
 
-    Returns one of: ds-product, ml-engineer, analytics-engineer, data-engineer, ai-engineer.
+    Returns one of: ds-product, data-analyst, ml-engineer, analytics-engineer, data-engineer, ai-engineer.
     Tie-break and default: ds-product.
     """
     haystack = (title + " " + jd_text).lower()
@@ -453,7 +455,7 @@ def detect_archetype(title: str, jd_text: str) -> str:
     if best_score == 0:
         return "ds-product"
     # Priority order for tie-breaking (ds-product wins)
-    for arch in ("ds-product", "ai-engineer", "ml-engineer", "analytics-engineer", "data-engineer"):
+    for arch in ("ds-product", "data-analyst", "ai-engineer", "ml-engineer", "analytics-engineer", "data-engineer"):
         if scores[arch] == best_score:
             return arch
     return "ds-product"

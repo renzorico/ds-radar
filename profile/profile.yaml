@@ -2,7 +2,7 @@
 
 identity:
   name: "Renzo Rico"
-  location: "London, UK (SE1 2LZ)"
+  location: "London, UK"
   languages: ["English", "Spanish"]
   citizenship: "Spanish (EU)"
 
@@ -12,11 +12,12 @@ contact:
   linkedin_url: "https://linkedin.com/in/renzorico"
 
 experience:
-  - "Data Scientist — Le Wagon, London (2023–present)"
+  - "Data Scientist — Le Wagon, Europe & Remote (2023–present)"
   - "Freelance Data Scientist (2023–present)"
-  - "BIM Modeler — BAC Engineering / SOCOTEC (2022–2023)"
+  - "BIM Modeler — BAC Engineering / SOCOTEC (2021–2022)"
 
 projects:
+  - "legalize-co: open-source legal data project in Python"
   - "ds-radar: AI-powered job search pipeline (Python, Claude API, Playwright)"
   - "No botes tu voto: civic tech platform for 2026 Colombian election, 10,000+ users (FastAPI, Next.js, TypeScript, Railway)"
   - "The London Bible: interactive London data atlas (Python, GeoPandas, Leaflet)"
@@ -26,6 +27,7 @@ projects:
 education:
   - "Data Science & AI — Le Wagon, Barcelona (2023)"
   - "Master's in Construction Management & Sustainability — La Salle Ramon Llull University, Barcelona (Oct 2018 – Jul 2020)"
+  - "Bachelor's in Architecture — Universidad del Norte, Barranquilla, Colombia (2014 – 2018)"
 
 work_authorization:
   needs_visa: true
@@ -55,17 +57,19 @@ roles:
     min: "Junior"
     max: "Mid"
     notes:
-      - "Avoid clearly senior / principal roles that require 7+ years experience or large team management."
+      - "Avoid clearly senior / principal roles that require 5+ years experience or large team management."
   anti_targets:
     - "Pure BI/reporting roles where ~80%+ is dashboards/Excel/PowerBI and little ownership."
     - "Non-technical 'data' roles (e.g. data entry, admin-heavy reporting)."
     - "Heavily sales/BD-focused 'AI' titles without real technical work."
+
 
 target_roles:
   - Data Scientist
   - ML Engineer
   - Analytics Engineer
   - AI Engineer
+  - Data Analyst
 
 long_term_targets:
   archetypes:
@@ -123,19 +127,14 @@ location:
 compensation:
   currency: "GBP"
   absolute_minimum:
-    base_per_year: 35000
+    base_per_year: 38000
     notes:
-      - "£35k/year is only acceptable if sponsorship is provided and the role has strong learning/culture."
+      - "£38k/year is only acceptable if sponsorship is provided and the role has strong learning/culture."
   target_range:
     min: 45000
     max: 60000
     notes:
       - "£45k–£60k/year is the realistic band for junior–mid DS/analytics roles in London right now."
-  stretch_range:
-    min: 60000
-    max: 75000
-    notes:
-      - "Stretch if the role is strong DS/ML/AI in a great environment."
   tradeoffs:
     - "Willing to trade some salary for sponsorship + strong culture + learning."
     - "Visa sponsorship and stability are more important than maximising base in the short term."
@@ -171,17 +170,23 @@ tech_stack:
   strong_skills:
     - "Python (data + ML)."
     - "SQL."
-    - "JavaScript and TypeScript."
+    - "JavaScript."
     - "Pandas / NumPy / scikit-learn."
     - "TensorFlow/Keras."
+    - "Feature engineering."
+    - "Statistical analysis."
+    - "Experimentation and A/B testing."
     - "FastAPI."
     - "NLP and UMAP."
     - "BigQuery and GCP."
     - "Docker."
+    - "Playwright."
+    - "API integration."
+    - "Web scraping."
     - "Vercel and Railway."
     - "Streamlit."
     - "Git."
-    - "React."
+    - "GeoPandas and geospatial analysis."
     - "LLMs and agentic AI systems."
     - "Teaching and data/ML instruction."
     - "Linux / CLI-focused workflows."
@@ -223,25 +228,19 @@ scoring:
     - "For now, C roles may still be interesting as 'backup' but are not auto-pipeline targets."
 
 scoring_weights:
-  role_match: 0.25
+  role_match: 0.26
   skills_alignment: 0.20
-  seniority: 0.15
-  compensation: 0.13
-  growth_trajectory: 0.12
-  company_stage: 0.07
-  product_interest: 0.05
-  interview_likelihood: 0.02
-  timeline: 0.01
+  seniority: 0.16
+  compensation: 0.10
+  growth_trajectory: 0.09
+  company_stage: 0.04
+  product_interest: 0.04
+  interview_likelihood: 0.08
+  timeline: 0.03
   geography: 0.00
 
-ats_targets:
-  - "greenhouse"
-  - "workable"
-  - "ashby"
-  - "lever"
-
 meta:
-  last_updated: "2026-04-07"
+  last_updated: "2026-04-25"
   notes:
     - "Profile tuned for early London job search where stability + sponsorship are more important than perfect role fit."
     - "Later, re-tighten preferences to focus more on LLM/agentic and product DS once visa is secured."
