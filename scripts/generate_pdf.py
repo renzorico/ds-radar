@@ -817,6 +817,11 @@ def render_cv_html(cv_markdown: str, company: str, role: str) -> str:
         extensions=["extra", "sane_lists"],
         output_format="html5",
     )
+    body_html = body_html.replace(
+        "<h2>Projects</h2>",
+        '<h2 class="page-break-before">Projects</h2>',
+        1,
+    )
     meta_html = "".join(
         f"<p>{md.markdown(line, output_format='html5').removeprefix('<p>').removesuffix('</p>')}</p>"
         for line in meta_lines
@@ -890,6 +895,10 @@ def render_cv_html(cv_markdown: str, company: str, role: str) -> str:
       letter-spacing: 0.08em;
       color: var(--accent);
       page-break-after: avoid;
+    }}
+    h2.page-break-before {{
+      break-before: page;
+      page-break-before: always;
     }}
     h3 {{
       margin: 10px 0 4px;
@@ -1022,8 +1031,11 @@ def generate_pdf(eval_path: "Path | str") -> str:
     # TODO: pass keyword_coverage_* into save_cv() header comment or tracker notes field
 
     markdown_path, pdf_path = build_output_paths(parsed["company"])
-    print(f"[CV] Target markdown: {markdown_path.relative_to(REPO_ROOT)}")
-    print(f"[CV] Target PDF: {pdf_path.relative_to(REPO_ROOT)}")
+    print(
+        "[CV] Outputs planned: "
+        f"markdown={markdown_path.relative_to(REPO_ROOT)} "
+        f"pdf={pdf_path.relative_to(REPO_ROOT)}"
+    )
     save_cv(
         tailored_cv,
         markdown_path,
@@ -1052,7 +1064,11 @@ def generate_pdf(eval_path: "Path | str") -> str:
             title=parsed["role"],
             source_eval=eval_path.name,
         )
-        print(f"[CV] PDF saved: {pdf_path.relative_to(REPO_ROOT)}")
+        print(
+            "[CV] Outputs saved: "
+            f"markdown={markdown_path.relative_to(REPO_ROOT)} "
+            f"pdf={pdf_path.relative_to(REPO_ROOT)}"
+        )
         return str(pdf_path.relative_to(REPO_ROOT))
     except Exception as exc:
         print(
