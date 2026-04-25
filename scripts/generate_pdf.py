@@ -61,11 +61,12 @@ COMPANY_DESCRIPTIONS: dict[str, str] = {
 PROJECT_DETAILS: dict[str, dict[str, str]] = {
     "legalize-co": {
         "name": "legalize-co",
-        "tech": "Python",
+        "tech": "Python, web scraping, Markdown pipelines, git",
         "repo_url": "https://github.com/renzorico/legalize-co",
         "summary": (
-            "Open-source legal data project in Python, extending the portfolio toward public-interest infrastructure "
-            "and structured document pipelines."
+            "Built a legislation-as-code pipeline for Colombian law that turns official legal texts into "
+            "version-controlled Markdown, making public legislation easier to scrape, diff, inspect, and reuse in "
+            "developer-friendly workflows."
         ),
     },
     "ds-radar": {
@@ -119,6 +120,57 @@ PROJECT_DETAILS: dict[str, dict[str, str]] = {
     },
 }
 
+EXPERIENCE_DETAILS: dict[str, dict[str, object]] = {
+    "data scientist|le wagon": {
+        "positioning": (
+            "Treat this as applied data-science delivery in an education environment, centered on analytical coaching, code review, project scoping, and experimentation support rather than classroom teaching."
+        ),
+        "highlights": [
+            "Reviewed notebooks, code, and end-to-end analytics projects across Python, SQL, machine learning, and experimentation workflows.",
+            "Helped learners scope ambiguous problems, test assumptions, debug models, and communicate findings clearly.",
+            "Supported 1000+ learners across applied analytics and machine learning work.",
+        ],
+        "avoid": [
+            "Do not over-index on learner volume alone.",
+            "Prioritise transferable strengths such as communication, project scoping, analytical rigor, debugging, experimentation, and code review.",
+            "Do not lead bullets with 'taught' or 'mentored' unless unavoidable.",
+            "Mention learner count at most once across the entire role.",
+            "Do not frame the role primarily as classroom teaching.",
+        ],
+    },
+    "freelance data scientist|": {
+        "positioning": (
+            "Emphasise consulting, dashboards, reporting workflows, and the private finance app without repeating the Projects section verbatim."
+        ),
+        "highlights": [
+            "Built a private business management and personal finance application.",
+            "Delivered consulting for data analytics teams focused on dashboarding, reporting workflows, and structuring messy operational data.",
+        ],
+        "avoid": [
+            "Do not reuse project bullets verbatim from No botes tu voto, UN Speeches NLP, or The London Bible.",
+            "Use Experience to describe consulting scope and delivery style; use Projects to describe named builds.",
+            "Do not describe the private application as client-facing.",
+            "Do not include the private application's URL or product name.",
+            "Do not claim product/commercial strategy work that is not explicitly verified.",
+        ],
+        "must_include_terms": ["private business management and personal finance application"],
+    },
+    "bim modeler|bac engineering / socotec": {
+        "positioning": (
+            "Translate BIM work into structured modelling, QA, precision, and cross-functional coordination rather than domain-specific construction jargon."
+        ),
+        "highlights": [
+            "Worked in the installation department using Revit, Navisworks, and AutoCAD.",
+            "Coordinated technical models and drawings across disciplines, reducing ambiguity and surfacing inconsistencies before downstream delivery.",
+            "Brings detail orientation, structured documentation, and workflow discipline that transfer well to data quality and analytics operations.",
+        ],
+        "avoid": [
+            "Do not make this sound like a data role.",
+            "Do extract transferable strengths: structured information management, QA, and coordination under constraints.",
+        ],
+    },
+}
+
 SKILL_GROUPS = {
     "Languages": ["Python (data + ML).", "SQL.", "JavaScript."],
     "Data & ML": [
@@ -152,7 +204,7 @@ SKILL_GROUPS = {
 
 ARCHETYPE_CV_CONFIG: dict[str, dict[str, object]] = {
     "ds-product": {
-        "title_line": "Data Scientist | Product Analytics & ML",
+        "title_line": "Data Scientist, Product Analytics & ML",
         "summary_seed": [
             "Data scientist working across Python, SQL, experimentation, and applied machine learning through teaching and freelance product delivery.",
             "Best positioned for product-facing roles that combine analytics, feature engineering, stakeholder communication, and decision-support systems."
@@ -166,7 +218,7 @@ ARCHETYPE_CV_CONFIG: dict[str, dict[str, object]] = {
         "bullet_emphasis": "Emphasise experimentation, product metrics, feature engineering, stakeholder communication, dashboard thinking, and translating ambiguous business questions into decision-support outputs.",
     },
     "data-analyst": {
-        "title_line": "Data Analyst | Analytics Specialist",
+        "title_line": "Data Analyst, Analytics Specialist",
         "summary_seed": [
             "Data-focused analyst with hands-on experience in Python, SQL, dashboards, reporting, and decision-support workflows across teaching and freelance delivery.",
             "Best positioned for roles centered on business analysis, KPI tracking, dashboarding, stakeholder support, and turning messy data into clear operational insight."
@@ -179,7 +231,7 @@ ARCHETYPE_CV_CONFIG: dict[str, dict[str, object]] = {
         "bullet_emphasis": "Emphasise dashboards, reporting, KPI tracking, stakeholder support, analytical clarity, and turning data into clear recommendations and operational insight.",
     },
     "analytics-engineer": {
-        "title_line": "Analytics Engineer | Data Scientist",
+        "title_line": "Analytics Engineer, Data Scientist",
         "summary_seed": [
             "Analytics-oriented data scientist with hands-on experience in Python, SQL, dashboards, data modeling, and business-facing decision support.",
             "Best positioned for roles that sit between analytics, data infrastructure, reporting, and stakeholder enablement."
@@ -192,7 +244,7 @@ ARCHETYPE_CV_CONFIG: dict[str, dict[str, object]] = {
         "bullet_emphasis": "Emphasise SQL, metrics layers, dashboards, reporting workflows, analytical reliability, and enabling teams with clearer data products.",
     },
     "data-engineer": {
-        "title_line": "Data Engineer | Analytics Engineer",
+        "title_line": "Data Engineer, Analytics Engineer",
         "summary_seed": [
             "Python-first data builder with experience in pipelines, APIs, scraping, structured datasets, and production-oriented analytics workflows.",
             "Best positioned for roles focused on data movement, transformation, reliability, and the systems that support analytics and ML use cases."
@@ -205,7 +257,7 @@ ARCHETYPE_CV_CONFIG: dict[str, dict[str, object]] = {
         "bullet_emphasis": "Emphasise data pipelines, ingestion, automation, scraping, APIs, reproducible workflows, and turning messy inputs into usable structured datasets.",
     },
     "ml-engineer": {
-        "title_line": "Machine Learning Engineer | Data Scientist",
+        "title_line": "Machine Learning Engineer, Data Scientist",
         "summary_seed": [
             "Machine-learning-oriented data scientist with hands-on experience in Python, feature engineering, model development, and applied NLP workflows.",
             "Best positioned for roles that combine analytical rigor with production-minded ML delivery and close collaboration with product or engineering teams."
@@ -219,7 +271,7 @@ ARCHETYPE_CV_CONFIG: dict[str, dict[str, object]] = {
         "bullet_emphasis": "Emphasise model-building workflows, feature engineering, NLP, experimentation, deployment-minded thinking, and collaboration needed to productionise high-value models.",
     },
     "ai-engineer": {
-        "title_line": "AI Engineer | Applied ML Engineer",
+        "title_line": "AI Engineer, Applied ML Engineer",
         "summary_seed": [
             "AI-focused data scientist building Python-based systems around LLMs, automation, decision support, and applied machine learning.",
             "Best positioned for roles that combine agentic workflows, model-enabled products, and pragmatic engineering for real user or business outcomes."
@@ -283,9 +335,12 @@ def _parse_experience_item(item: str) -> dict[str, str]:
     match = re.match(r"^(?P<title>.+?)\s+[—–-]\s+(?P<company>.+?),\s+(?P<location>.+?)\s+\((?P<dates>.+)\)$", item)
     if not match:
         match = re.match(r"^(?P<title>.+?)\s+[—–-]\s+(?P<company>.+?)\s+\((?P<dates>.+)\)$", item)
+    if not match:
+        match = re.match(r"^(?P<title>.+?)\s+\((?P<dates>.+)\)$", item)
     if match:
         data = match.groupdict()
         data.setdefault("location", "")
+        data.setdefault("company", "")
         data["company_description"] = COMPANY_DESCRIPTIONS.get(data["company"].strip().lower(), "")
         return data
     return {
@@ -295,6 +350,24 @@ def _parse_experience_item(item: str) -> dict[str, str]:
         "dates": "",
         "company_description": "",
     }
+
+
+def _experience_key(title: str, company: str) -> str:
+    return f"{title.strip().lower()}|{company.strip().lower()}"
+
+
+def _experience_record(item: str) -> dict[str, object]:
+    record = _parse_experience_item(item)
+    details = EXPERIENCE_DETAILS.get(
+        _experience_key(record.get("title", ""), record.get("company", "")),
+        {},
+    )
+    merged: dict[str, object] = dict(record)
+    merged["positioning"] = details.get("positioning", "")
+    merged["highlights"] = details.get("highlights", [])
+    merged["avoid"] = details.get("avoid", [])
+    merged["must_include_terms"] = details.get("must_include_terms", [])
+    return merged
 
 
 def _parse_education_item(item: str) -> dict[str, str]:
@@ -491,7 +564,7 @@ def build_canonical_cv(profile: dict, archetype: str = "ds-product") -> str:
     ]
     meta_line = " | ".join(part for part in contact_parts if part)
 
-    experience_items = [_parse_experience_item(str(item).strip()) for item in profile.get("experience", []) if str(item).strip()]
+    experience_items = [_experience_record(str(item).strip()) for item in profile.get("experience", []) if str(item).strip()]
     education_items = [_parse_education_item(str(item).strip()) for item in profile.get("education", []) if str(item).strip()]
     project_items = [_project_record(str(item).strip()) for item in profile.get("projects", []) if str(item).strip()]
     strong_skills = [str(item).strip() for item in tech.get("strong_skills", []) if str(item).strip()]
@@ -539,6 +612,17 @@ def build_canonical_cv(profile: dict, archetype: str = "ds-product") -> str:
                 lines.append(location_text)
             if experience.get("company_description"):
                 lines.append(experience["company_description"])
+            if experience.get("positioning"):
+                lines.append(f"Focus: {str(experience.get('positioning', '')).strip()}")
+            highlights = [str(item).strip() for item in experience.get("highlights", []) if str(item).strip()]
+            if highlights:
+                lines.append(f"Verified highlights: {' | '.join(highlights)}")
+            avoid_notes = [str(item).strip() for item in experience.get("avoid", []) if str(item).strip()]
+            if avoid_notes:
+                lines.append(f"Avoid: {' | '.join(avoid_notes)}")
+            must_include_terms = [str(item).strip() for item in experience.get("must_include_terms", []) if str(item).strip()]
+            if must_include_terms:
+                lines.append(f"Must include if relevant: {' | '.join(must_include_terms)}")
             lines.append(
                 "- Add role-relevant bullets grounded in the verified profile and job description, "
                 f"with emphasis on {str(archetype_config.get('bullet_emphasis', '')).strip()}"
@@ -571,14 +655,6 @@ def build_canonical_cv(profile: dict, archetype: str = "ds-product") -> str:
                 line += f" ({dates})"
             lines.append(line)
 
-    lines.extend([
-        "",
-        "## Interests",
-        "- Brazilian jiu-jitsu athlete",
-        "- Open source and Linux ecosystems",
-        "- Chess & puzzles",
-    ])
-
     return "\n".join(lines).strip() + "\n"
 
 
@@ -587,7 +663,7 @@ def build_profile_fact_block(profile: dict, archetype: str = "ds-product") -> st
     contact = profile.get("contact", {}) or {}
     tech = profile.get("tech_stack", {}) or {}
     archetype_config = _archetype_config(archetype)
-    experience_items = [_parse_experience_item(str(item).strip()) for item in profile.get("experience", []) if str(item).strip()]
+    experience_items = [_experience_record(str(item).strip()) for item in profile.get("experience", []) if str(item).strip()]
     education_items = [_parse_education_item(str(item).strip()) for item in profile.get("education", []) if str(item).strip()]
     project_items = [_project_record(str(item).strip()) for item in profile.get("projects", []) if str(item).strip()]
     group_order = archetype_config.get("skill_group_order", list(SKILL_GROUPS.keys()))
@@ -616,7 +692,11 @@ def build_profile_fact_block(profile: dict, archetype: str = "ds-product") -> st
             "  - "
             f"title={item.get('title', '')}; company={item.get('company', '')}; "
             f"location={item.get('location', '')}; dates={item.get('dates', '')}; "
-            f"company_description={item.get('company_description', '') or 'n/a'}"
+            f"company_description={item.get('company_description', '') or 'n/a'}; "
+            f"positioning={item.get('positioning', '') or 'n/a'}; "
+            f"highlights={' | '.join(str(v) for v in item.get('highlights', []) if str(v).strip()) or 'n/a'}; "
+            f"avoid={' | '.join(str(v) for v in item.get('avoid', []) if str(v).strip()) or 'n/a'}; "
+            f"must_include_terms={' | '.join(str(v) for v in item.get('must_include_terms', []) if str(v).strip()) or 'n/a'}"
         )
     lines.append("- projects:")
     for item in project_items[:5]:
@@ -653,6 +733,15 @@ Rewrite the CV below tailored to the job description provided.
 - Rewrite the professional summary as 2 sentences: sentence 1 grounds the candidate in their current work; sentence 2 connects it forward to this role ({role} at {company}). Avoid generic phrases like "passionate about" or "seeking opportunities".
 - Keep the same sections as the canonical CV unless there is a strong reason to drop one.
 - Treat the canonical CV as the selected archetype template. Preserve its title line, skill emphasis, project ordering logic, and overall positioning unless the JD creates a strong reason to adjust within that archetype.
+- Avoid repeating the same accomplishment in both Experience and Projects. Use Experience for role scope, delivery style, and transferable value; use Projects for named builds.
+- For teaching roles, emphasise transferable technical and analytical value over learner-count vanity metrics.
+- Preserve proper nouns and named artifacts from verified profile facts when they materially strengthen credibility. Do not replace them with generic descriptions.
+- For Le Wagon specifically, frame the role through analytical coaching, code review, project scoping, experimentation, and stakeholder communication. Do not lead bullets with `taught` or `mentored`, and mention learner volume at most once.
+- For Le Wagon, use exactly 2 bullets.
+- For Freelance Data Scientist, use exactly 2 bullets.
+- Write in a plain, professional style. Prefer direct facts over polished CV language.
+- Avoid inflated phrasing such as `positioned to`, `drive`, `rigorous`, `high-velocity`, `stakeholder-ready`, `decision-support`, `production-quality`, `fast-moving`, or similar filler unless the exact wording is needed from the JD.
+- Keep sentences compact and concrete.
 
 === SECTION ORDER (follow exactly) ===
 1. Contact / meta line (name already in H1 header — do not repeat it)
@@ -664,13 +753,17 @@ Rewrite the CV below tailored to the job description provided.
 
 === FORMATTING RULES ===
 - Output a complete CV in GitHub-flavoured Markdown only. No preamble, no explanation, no code fences.
-- Every bullet under Experience and Projects must follow the Google XYZ formula: "Accomplished [X] by doing [Y], resulting in [Z]." Use real numbers from the profile where available.
+- Every bullet under Experience and Projects should follow the Google XYZ idea: what was done, how it was done, and the outcome. Use real numbers from the profile where available.
+- Vary sentence structure naturally. Do not repeat `resulting in` mechanically across bullets.
 - Keep the title line aligned with the selected archetype while still matching the job naturally.
+- Use exactly one coherent title line, not multiple stacked titles or two separate role labels.
 - Put dates on the same line as each Experience heading using the format: `### Title - Company | Dates`.
 - Put location on the next line only if useful.
 - Use the project website URL when one is provided in the profile facts; otherwise use the GitHub URL. Format the chosen link inline after the project name.
 - For each Experience entry, add a 1-sentence company blurb in italics below the job title line if the company is well-known enough to describe (skip if freelance or self-employed).
 - Do not add a page-count note or any meta-commentary.
+- Do not include an Interests section unless it is explicitly present in the required section order.
+- Project bullets should be concise and factual: what the project is, what you built, and one clear outcome.
 
 === CANDIDATE FIT ===
 Grade: {grade}
