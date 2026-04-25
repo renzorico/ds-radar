@@ -204,7 +204,7 @@ SKILL_GROUPS = {
 
 ARCHETYPE_CV_CONFIG: dict[str, dict[str, object]] = {
     "ds-product": {
-        "title_line": "Data Scientist, Product Analytics & ML",
+        "title_line": "Data Scientist",
         "summary_seed": [
             "Data scientist working across Python, SQL, experimentation, and applied machine learning through teaching and freelance product delivery.",
             "Best positioned for product-facing roles that combine analytics, feature engineering, stakeholder communication, and decision-support systems."
@@ -218,7 +218,7 @@ ARCHETYPE_CV_CONFIG: dict[str, dict[str, object]] = {
         "bullet_emphasis": "Emphasise experimentation, product metrics, feature engineering, stakeholder communication, dashboard thinking, and translating ambiguous business questions into decision-support outputs.",
     },
     "data-analyst": {
-        "title_line": "Data Analyst, Analytics Specialist",
+        "title_line": "Data Analyst",
         "summary_seed": [
             "Data-focused analyst with hands-on experience in Python, SQL, dashboards, reporting, and decision-support workflows across teaching and freelance delivery.",
             "Best positioned for roles centered on business analysis, KPI tracking, dashboarding, stakeholder support, and turning messy data into clear operational insight."
@@ -231,7 +231,7 @@ ARCHETYPE_CV_CONFIG: dict[str, dict[str, object]] = {
         "bullet_emphasis": "Emphasise dashboards, reporting, KPI tracking, stakeholder support, analytical clarity, and turning data into clear recommendations and operational insight.",
     },
     "analytics-engineer": {
-        "title_line": "Analytics Engineer, Data Scientist",
+        "title_line": "Analytics Engineer",
         "summary_seed": [
             "Analytics-oriented data scientist with hands-on experience in Python, SQL, dashboards, data modeling, and business-facing decision support.",
             "Best positioned for roles that sit between analytics, data infrastructure, reporting, and stakeholder enablement."
@@ -244,7 +244,7 @@ ARCHETYPE_CV_CONFIG: dict[str, dict[str, object]] = {
         "bullet_emphasis": "Emphasise SQL, metrics layers, dashboards, reporting workflows, analytical reliability, and enabling teams with clearer data products.",
     },
     "data-engineer": {
-        "title_line": "Data Engineer, Analytics Engineer",
+        "title_line": "Data Engineer",
         "summary_seed": [
             "Python-first data builder with experience in pipelines, APIs, scraping, structured datasets, and production-oriented analytics workflows.",
             "Best positioned for roles focused on data movement, transformation, reliability, and the systems that support analytics and ML use cases."
@@ -257,7 +257,7 @@ ARCHETYPE_CV_CONFIG: dict[str, dict[str, object]] = {
         "bullet_emphasis": "Emphasise data pipelines, ingestion, automation, scraping, APIs, reproducible workflows, and turning messy inputs into usable structured datasets.",
     },
     "ml-engineer": {
-        "title_line": "Machine Learning Engineer, Data Scientist",
+        "title_line": "Machine Learning Engineer",
         "summary_seed": [
             "Machine-learning-oriented data scientist with hands-on experience in Python, feature engineering, model development, and applied NLP workflows.",
             "Best positioned for roles that combine analytical rigor with production-minded ML delivery and close collaboration with product or engineering teams."
@@ -271,7 +271,7 @@ ARCHETYPE_CV_CONFIG: dict[str, dict[str, object]] = {
         "bullet_emphasis": "Emphasise model-building workflows, feature engineering, NLP, experimentation, deployment-minded thinking, and collaboration needed to productionise high-value models.",
     },
     "ai-engineer": {
-        "title_line": "AI Engineer, Applied ML Engineer",
+        "title_line": "AI Engineer",
         "summary_seed": [
             "AI-focused data scientist building Python-based systems around LLMs, automation, decision support, and applied machine learning.",
             "Best positioned for roles that combine agentic workflows, model-enabled products, and pragmatic engineering for real user or business outcomes."
@@ -388,6 +388,145 @@ def _project_record(item: str) -> dict[str, str]:
         "website_url": details.get("website_url", ""),
         "repo_url": details.get("repo_url", ""),
     }
+
+
+def _clean_skill_label(skill: str) -> str:
+    return str(skill).strip().rstrip(".")
+
+
+def _ordered_skills(skills: list[str], priority: list[str]) -> list[str]:
+    priority_lookup = {_clean_skill_label(item).lower(): idx for idx, item in enumerate(priority)}
+    seen: set[str] = set()
+    ordered = []
+    for skill in sorted(
+        skills,
+        key=lambda item: (priority_lookup.get(_clean_skill_label(item).lower(), len(priority_lookup)), skills.index(item)),
+    ):
+        clean = _clean_skill_label(skill)
+        key = clean.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        ordered.append(clean)
+    return ordered
+
+
+def _experience_title_for_archetype(title: str, archetype: str) -> str:
+    clean = str(title).strip()
+    if archetype == "data-analyst" and clean == "Data Scientist":
+        return "Data Analyst"
+    return clean
+
+
+def _project_heading(project: dict[str, str]) -> str:
+    project_url = project.get("website_url") or project.get("repo_url")
+    if project_url:
+        return f"### **{project['name']} | {project_url}**"
+    return f"### **{project['name']}**"
+
+
+def _skills_section_lines(
+    strong_skills: list[str],
+    must_match: list[str],
+    archetype_config: dict[str, object],
+) -> list[str]:
+    normalized_skills = {_clean_skill_label(s).lower() for s in strong_skills + must_match}
+    skill_group_order = archetype_config.get("skill_group_order", list(SKILL_GROUPS.keys()))
+    if not isinstance(skill_group_order, list):
+        skill_group_order = list(SKILL_GROUPS.keys())
+    skill_priority = archetype_config.get("skill_priority", [])
+    if not isinstance(skill_priority, list):
+        skill_priority = []
+
+    skill_lines: list[str] = []
+    for label in [str(group) for group in skill_group_order if str(group) in SKILL_GROUPS]:
+        items = SKILL_GROUPS[label]
+        available = [item for item in items if _clean_skill_label(item).lower() in normalized_skills]
+        available = _ordered_skills(available, [str(item) for item in skill_priority])
+        available = [_clean_skill_label(item) for item in available]
+        if available:
+            skill_lines.append(f"- **{label}:** {', '.join(available)}")
+
+    if not skill_lines:
+        core_skills = _ordered_skills(strong_skills or must_match, [str(item) for item in skill_priority])
+        core_skills = [_clean_skill_label(item) for item in core_skills]
+        skill_lines = [f"- **Core:** {', '.join(core_skills)}"]
+    return skill_lines
+
+
+def _projects_section_lines(project_items: list[dict[str, str]]) -> list[str]:
+    lines = ["## Projects"]
+    for project in project_items:
+        lines.extend(["", _project_heading(project)])
+        if project.get("tech"):
+            lines.append(project["tech"])
+        if project.get("summary"):
+            lines.append(f"- {project['summary']}")
+    return lines
+
+
+def _replace_markdown_section(text: str, heading: str, replacement: str) -> str:
+    pattern = rf"(?ms)^## {re.escape(heading)}\n.*?(?=^## |\Z)"
+    block = replacement.strip() + "\n"
+    if re.search(pattern, text):
+        return re.sub(pattern, block, text, count=1)
+    return text.rstrip() + "\n\n" + block
+
+
+def _force_title_line(text: str, title_line: str) -> str:
+    lines = text.splitlines()
+    heading_index = next((idx for idx, line in enumerate(lines) if line.startswith("# ")), None)
+    if heading_index is None:
+        return text
+
+    next_section_index = next(
+        (idx for idx in range(heading_index + 1, len(lines)) if lines[idx].startswith("## ")),
+        len(lines),
+    )
+    title_index = next(
+        (idx for idx in range(heading_index + 1, next_section_index) if lines[idx].strip()),
+        None,
+    )
+    if title_index is None:
+        insert_at = heading_index + 1
+        lines[insert_at:insert_at] = ["", title_line]
+    else:
+        lines[title_index] = title_line
+    return "\n".join(lines)
+
+
+def _normalize_experience_spacing(text: str) -> str:
+    text = re.sub(r"(\*.*\*)\n(- )", r"\1\n\n\2", text)
+    text = re.sub(r"(^### .+\n)(- )", r"\1\n\2", text, flags=re.MULTILINE)
+    return text
+
+
+def _enforce_experience_titles(text: str, archetype: str) -> str:
+    if archetype != "data-analyst":
+        return text
+    text = re.sub(r"^### Data Scientist(?=\s*(?:-|\|))", "### Data Analyst", text, flags=re.MULTILINE)
+    text = re.sub(r"^### Freelance Data Scientist(?=\s*(?:\||$))", "### Freelance Data Analyst", text, flags=re.MULTILINE)
+    return text
+
+
+def enforce_cv_consistency(cv_text: str, profile: dict, archetype: str) -> str:
+    archetype_config = _archetype_config(archetype)
+    tech = profile.get("tech_stack", {}) or {}
+    strong_skills = [str(item).strip() for item in tech.get("strong_skills", []) if str(item).strip()]
+    must_match = [str(item).strip() for item in tech.get("must_match_skills", []) if str(item).strip()]
+    project_items = [_project_record(str(item).strip()) for item in profile.get("projects", []) if str(item).strip()]
+
+    cv_text = _force_title_line(
+        cv_text,
+        str(archetype_config.get("title_line", DEFAULT_CANDIDATE_TITLE)).strip(),
+    )
+    skills_block = "\n".join(["## Skills", *_skills_section_lines(strong_skills, must_match, archetype_config)])
+    projects_block = "\n".join(_projects_section_lines(project_items))
+    cv_text = _replace_markdown_section(cv_text, "Skills", skills_block)
+    cv_text = _replace_markdown_section(cv_text, "Projects", projects_block)
+    cv_text = _enforce_experience_titles(cv_text, archetype)
+    cv_text = _normalize_experience_spacing(cv_text)
+    return cv_text.strip()
 
 
 # ── Step 1: Parse eval report ─────────────────────────────────────────────────
@@ -507,10 +646,10 @@ def _archetype_config(archetype: str) -> dict[str, object]:
 
 
 def _ordered_skills(items: list[str], priority: list[str]) -> list[str]:
-    priority_map = {item.rstrip(".").lower(): idx for idx, item in enumerate(priority)}
+    priority_map = {_clean_skill_label(item).lower(): idx for idx, item in enumerate(priority)}
     return sorted(
         items,
-        key=lambda item: (priority_map.get(item.rstrip(".").lower(), len(priority_map)), items.index(item)),
+        key=lambda item: (priority_map.get(_clean_skill_label(item).lower(), len(priority_map)), items.index(item)),
     )
 
 
@@ -578,30 +717,16 @@ def build_canonical_cv(profile: dict, archetype: str = "ds-product") -> str:
 
     lines.extend(["", "## Summary", summary_text])
 
-    normalized_skills = {s.rstrip(".").lower() for s in strong_skills + must_match}
-    skill_group_order = archetype_config.get("skill_group_order", list(SKILL_GROUPS.keys()))
-    if not isinstance(skill_group_order, list):
-        skill_group_order = list(SKILL_GROUPS.keys())
-    skill_priority = archetype_config.get("skill_priority", [])
-    if not isinstance(skill_priority, list):
-        skill_priority = []
-    skill_lines: list[str] = []
-    for label in [str(group) for group in skill_group_order if str(group) in SKILL_GROUPS]:
-        items = SKILL_GROUPS[label]
-        available = [item for item in items if item.rstrip(".").lower() in normalized_skills]
-        available = _ordered_skills(available, [str(item) for item in skill_priority])
-        if available:
-            skill_lines.append(f"- **{label}:** {', '.join(available)}")
-    if not skill_lines:
-        skill_lines = [f"- **Core:** {', '.join(_unique(strong_skills or must_match))}"]
-
     lines.extend(["", "## Skills"])
-    lines.extend(skill_lines)
+    lines.extend(_skills_section_lines(strong_skills, must_match, archetype_config))
 
     if experience_items:
         lines.extend(["", "## Experience"])
         for experience in experience_items:
-            heading_bits = [experience.get("title", "").strip(), experience.get("company", "").strip()]
+            heading_bits = [
+                _experience_title_for_archetype(experience.get("title", "").strip(), archetype),
+                experience.get("company", "").strip(),
+            ]
             heading = " - ".join(part for part in heading_bits if part)
             dates = experience.get("dates", "").strip()
             location_text = experience.get("location", "").strip()
@@ -629,17 +754,7 @@ def build_canonical_cv(profile: dict, archetype: str = "ds-product") -> str:
             )
 
     if project_items:
-        lines.extend(["", "## Projects"])
-        for project in project_items[:5]:
-            project_heading = f"### {project['name']}"
-            if project.get("tech"):
-                project_heading += f" ({project['tech']})"
-            lines.extend(["", project_heading])
-            project_url = project.get("website_url") or project.get("repo_url")
-            if project_url:
-                lines.append(f"Project: {project_url}")
-            if project.get("summary"):
-                lines.append(f"- {project['summary']}")
+        lines.extend(["", *_projects_section_lines(project_items)])
 
     if education_items:
         lines.extend(["", "## Education"])
@@ -670,7 +785,7 @@ def build_profile_fact_block(profile: dict, archetype: str = "ds-product") -> st
     if not isinstance(group_order, list):
         group_order = list(SKILL_GROUPS.keys())
     skill_lines = [
-        f"- {label}: {', '.join(SKILL_GROUPS[label])}"
+        f"- {label}: {', '.join(_clean_skill_label(skill) for skill in SKILL_GROUPS[label])}"
         for label in [str(group) for group in group_order if str(group) in SKILL_GROUPS]
     ]
     lines = [
@@ -699,7 +814,7 @@ def build_profile_fact_block(profile: dict, archetype: str = "ds-product") -> st
             f"must_include_terms={' | '.join(str(v) for v in item.get('must_include_terms', []) if str(v).strip()) or 'n/a'}"
         )
     lines.append("- projects:")
-    for item in project_items[:5]:
+    for item in project_items:
         lines.append(
             "  - "
             f"name={item.get('name', '')}; website_url={item.get('website_url', '') or 'n/a'}; "
@@ -733,6 +848,7 @@ Rewrite the CV below tailored to the job description provided.
 - Rewrite the professional summary as 2 sentences: sentence 1 grounds the candidate in their current work; sentence 2 connects it forward to this role ({role} at {company}). Avoid generic phrases like "passionate about" or "seeking opportunities".
 - Keep the same sections as the canonical CV unless there is a strong reason to drop one.
 - Treat the canonical CV as the selected archetype template. Preserve its title line, skill emphasis, project ordering logic, and overall positioning unless the JD creates a strong reason to adjust within that archetype.
+- Use the exact archetype title line from the canonical CV. Do not replace it with a broader or more generic title.
 - Avoid repeating the same accomplishment in both Experience and Projects. Use Experience for role scope, delivery style, and transferable value; use Projects for named builds.
 - For teaching roles, emphasise transferable technical and analytical value over learner-count vanity metrics.
 - Preserve proper nouns and named artifacts from verified profile facts when they materially strengthen credibility. Do not replace them with generic descriptions.
@@ -757,10 +873,13 @@ Rewrite the CV below tailored to the job description provided.
 - Vary sentence structure naturally. Do not repeat `resulting in` mechanically across bullets.
 - Keep the title line aligned with the selected archetype while still matching the job naturally.
 - Use exactly one coherent title line, not multiple stacked titles or two separate role labels.
+- For the `data-analyst` archetype, rename `Data Scientist` experience headings to `Data Analyst` when they refer to the same underlying role.
 - Put dates on the same line as each Experience heading using the format: `### Title - Company | Dates`.
 - Put location on the next line only if useful.
-- Use the project website URL when one is provided in the profile facts; otherwise use the GitHub URL. Format the chosen link inline after the project name.
+- Include all listed projects.
+- Use the project website URL when one is provided in the profile facts; otherwise use the GitHub URL. Format the chosen link inline after the project name in bold: `### **Project Name | https://...**`.
 - For each Experience entry, add a 1-sentence company blurb in italics below the job title line if the company is well-known enough to describe (skip if freelance or self-employed).
+- Leave a blank line between an italic company blurb and the first bullet so Markdown list rendering stays stable.
 - Do not add a page-count note or any meta-commentary.
 - Do not include an Interests section unless it is explicitly present in the required section order.
 - Project bullets should be concise and factual: what the project is, what you built, and one clear outcome.
@@ -1111,6 +1230,8 @@ def generate_pdf(eval_path: "Path | str") -> str:
         elif not parsed["jd_text"]:
             print("[WARN] JD text missing from eval — provider rewrite skipped, using keyword injection")
         tailored_cv = inject_keywords(base_cv, parsed["keywords"])
+
+    tailored_cv = enforce_cv_consistency(tailored_cv, profile, archetype)
 
     keywords = parsed.get("keywords", [])
     keyword_coverage_total = len(keywords)
