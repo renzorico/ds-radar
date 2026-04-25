@@ -1,7 +1,7 @@
 """
 ds-radar CV generator
-Usage: python generate_pdf.py <eval_path>
-Example: python generate_pdf.py evals/deepmind_2026-04-01.md
+Usage: python generate_pdf.py <eval_path> [--model MODEL]
+Example: python generate_pdf.py evals/deepmind_2026-04-01.md --model claude-haiku-4-5-20251001
 
 If the eval contains a real JD ([JD_SOURCE: REAL]), calls the configured LLM to
 rewrite a canonical CV built from profile/profile.yaml tailored to that job.
@@ -10,6 +10,7 @@ Always writes Markdown CV to applications/cv_{company}_{YYYYMMDD}.md and
 attempts to render applications/cv_{company}_{YYYYMMDD}.pdf via Playwright.
 """
 
+import argparse
 import html
 import os
 import re
@@ -899,12 +900,19 @@ def generate_pdf(eval_path: "Path | str") -> str:
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main() -> None:
-    if len(sys.argv) != 2:
-        print("Usage: python generate_pdf.py <eval_path>")
-        sys.exit(1)
+    parser = argparse.ArgumentParser(description="Generate a tailored CV and PDF from an eval report.")
+    parser.add_argument("eval_path", help="Path to the eval markdown file.")
+    parser.add_argument(
+        "--model",
+        help="LLM model override for this run. Overrides MODEL_OVERRIDE when provided.",
+    )
+    args = parser.parse_args()
+
+    if args.model:
+        os.environ["MODEL_OVERRIDE"] = args.model
 
     try:
-        rel_path = generate_pdf(sys.argv[1])
+        rel_path = generate_pdf(args.eval_path)
     except (FileNotFoundError, ValueError) as e:
         print(f"Error: {e}")
         sys.exit(1)

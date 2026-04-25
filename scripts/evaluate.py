@@ -1,17 +1,17 @@
 """
-ds-radar evaluator — REAL MODE (Claude Haiku)
-Usage: python evaluate.py <job_url>
+ds-radar evaluator
+Usage: python evaluate.py <job_url> [--force] [--model MODEL]
+       python evaluate.py --test-jd [--model MODEL]
 
 Evaluates a job offer across 10 dimensions and writes a scored report to evals/.
-Requires ANTHROPIC_API_KEY in ds-radar/.env
+Uses the configured LLM provider, defaulting to Anthropic claude-haiku-4-5-20251001.
 """
 
+import argparse
 import sys
 import os
 import re
 import csv
-import json
-import time
 import threading
 from datetime import date
 from pathlib import Path
@@ -25,14 +25,10 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 
 from dotenv import load_dotenv
 load_dotenv(REPO_ROOT / ".env")
-
-_api_key = os.getenv("ANTHROPIC_API_KEY")
-if not _api_key:
-    print("[ERROR] ANTHROPIC_API_KEY not found. Add it to ds-radar/.env")
-    sys.exit(1)
-
-import anthropic
-_client = anthropic.Anthropic(api_key=_api_key)
+try:
+    from llm_provider import describe_task_model, format_usage, run_job_evaluation
+except ImportError:  # pragma: no cover - module execution fallback
+    from scripts.llm_provider import describe_task_model, format_usage, run_job_evaluation
 
 # ── Paths ────────────────────────────────────────────────────────────────────
 
@@ -45,7 +41,6 @@ CALIBRATION_PATH = EVALS_DIR / "calibration_notes.tsv"
 SCAN_HISTORY_HEADER = ["url", "date_seen", "eval_path"]
 SOURCE_HISTORY = REPO_ROOT / "source-history.tsv"
 
-MODEL = "claude-haiku-4-5-20251001"
 _PROFILE_CACHE: dict | None = None
 _CALIBRATION_CACHE: list[dict] | None = None
 
@@ -163,6 +158,7 @@ def load_profile() -> dict:
             "work_content_preferences": data.get("work_content_preferences", {}),
             "tech_stack": data.get("tech_stack", {}),
             "scoring": data.get("scoring", {}),
+            "scoring_weights": data.get("scoring_weights", {}),
             "sponsorship_rules": data.get("sponsorship_rules", {}),
         }
     return _PROFILE_CACHE
@@ -248,15 +244,36 @@ _SENIOR_TITLE_PATTERNS = [
     r"\bsr\.",
     r"\blead\b",
     r"\bprincipal\b",
+    r"\bstaff\s+engineer\b",
     r"\bstaff\b",
     r"\bhead\s+of\b",
     r"\bdirector\b",
     r"\bvp\b",
+    r"\bvice\s+president\b",
     r"\bmanager\b",
     r"\bowner\b",
+    r"\bco[-\s]?founder\b",
+    r"\bfounder\b",
     r"\bchief\b",
+    r"\bcto\b",
+    r"\bcpo\b",
     r"\bc-level\b",
+    r"\bc[-\s]?suite\b",
 ]
+
+_JUNIOR_MID_PATTERNS = [
+    r"\bjunior\b",
+    r"\bassociate\b",
+    r"\bgraduate\b",
+    r"\bentry[-\s]?level\b",
+    r"\bmid[-\s]?level\b",
+    r"\bearly\s+career\b",
+]
+
+SALARY_PENALTY_THRESHOLD_GBP = 70_000
+SALARY_HARD_FAIL_THRESHOLD_GBP = 80_000
+JUNIOR_SIGNAL_ROLE_MATCH_BOOST = 0.3
+JUNIOR_SIGNAL_SENIORITY_BOOST = 0.7
 
 
 def detect_seniority_level(title: str, jd_text: str) -> dict:
@@ -283,6 +300,128 @@ def detect_seniority_level(title: str, jd_text: str) -> dict:
             }
 
     return {"status": "ok", "reason": ""}
+
+
+def detect_junior_mid_signals(title: str, jd_text: str) -> dict:
+    """Find explicit junior-to-mid signals in the title or description."""
+    clean_title = re.sub(r"^\[JD_SOURCE: (?:REAL|MOCK)\]\n", "", title)
+    clean_body = re.sub(r"^\[JD_SOURCE: (?:REAL|MOCK)\]\n", "", jd_text)
+    haystack = f"{clean_title}\n{clean_body}"
+    hits = [
+        m.group() for pat in _JUNIOR_MID_PATTERNS
+        for m in [re.search(pat, haystack, re.IGNORECASE)] if m
+    ]
+    if not hits:
+        return {"status": "neutral", "evidence": ""}
+    return {
+        "status": "positive",
+        "evidence": "; ".join(dict.fromkeys(hits)),
+    }
+
+
+def _parse_salary_amount(raw_amount: str) -> int:
+    amount = raw_amount.lower().replace(",", "").strip()
+    multiplier = 1_000 if amount.endswith("k") else 1
+    amount = amount.removesuffix("k")
+    return int(float(amount) * multiplier)
+
+
+def _parse_salary_pair(raw_low: str, raw_high: str) -> tuple[int, int]:
+    low = _parse_salary_amount(raw_low)
+    high = _parse_salary_amount(raw_high)
+    if low < 1_000 and high >= 1_000:
+        low *= 1_000
+    if high < 1_000 and low >= 1_000:
+        high *= 1_000
+    return low, high
+
+
+def _salary_ranges(text: str) -> list[tuple[int, int, str]]:
+    """Extract stated GBP salary ranges as (min, max, evidence)."""
+    ranges: list[tuple[int, int, str]] = []
+    amount = r"(\d+(?:,\d{3})*(?:\.\d+)?k?)"
+    pattern = re.compile(
+        rf"£\s*{amount}\s*(?:-|–|—|to)\s*(?:£\s*)?{amount}",
+        re.IGNORECASE,
+    )
+    for match in pattern.finditer(text):
+        low, high = _parse_salary_pair(match.group(1), match.group(2))
+        salary_min, salary_max = sorted((low, high))
+        ranges.append((salary_min, salary_max, match.group(0)))
+    return ranges
+
+
+def detect_salary_band_status(jd: dict) -> dict:
+    """Gate roles whose stated salary minimum is above the target band."""
+    salary_text = " ".join(
+        str(jd.get(key, "") or "") for key in ("title", "salary", "description")
+    )
+    clean = re.sub(r"^\[JD_SOURCE: (?:REAL|MOCK)\]\n", "", salary_text)
+    ranges = _salary_ranges(clean)
+    if not ranges:
+        return {"status": "ok", "reason": "", "evidence": "", "minimum_gbp": None}
+
+    salary_min, _salary_max, evidence = max(ranges, key=lambda item: item[0])
+    if salary_min > SALARY_HARD_FAIL_THRESHOLD_GBP:
+        return {
+            "status": "very_high",
+            "reason": f"stated salary minimum £{salary_min:,} exceeds £80,000",
+            "evidence": evidence,
+            "minimum_gbp": salary_min,
+        }
+    if salary_min > SALARY_PENALTY_THRESHOLD_GBP:
+        return {
+            "status": "high",
+            "reason": f"stated salary minimum £{salary_min:,} exceeds £70,000",
+            "evidence": evidence,
+            "minimum_gbp": salary_min,
+        }
+    return {"status": "ok", "reason": "", "evidence": evidence, "minimum_gbp": salary_min}
+
+
+def _assign_grade(overall_score: float) -> str:
+    # Calibration:
+    # A = exceptional fit worth prioritising immediately.
+    # B = strong realistic fit worth tailoring now.
+    # C = plausible but not worth tailoring now.
+    # D/F = poor fit or blocked.
+    if overall_score >= 4.4:
+        return "A"
+    if overall_score >= 3.6:
+        return "B"
+    if overall_score >= 2.8:
+        return "C"
+    if overall_score >= 1.8:
+        return "D"
+    return "F"
+
+
+def _recalculate_result_score(result: dict) -> None:
+    scores = result.get("scores", {})
+    weights = load_profile().get("scoring_weights", {})
+    _dims = list(scores.keys())
+    if not weights or set(weights.keys()) != set(_dims):
+        print("[WARN] scoring_weights missing or incomplete in profile.yaml — using equal weights")
+        weights = {dim: 1 / len(_dims) for dim in _dims}
+    result["overall_score"] = round(sum(scores[dim] * weights[dim] for dim in _dims), 1)
+    result["grade"] = _assign_grade(result["overall_score"])
+    result["recommended"] = result["grade"] in {"A", "B"}
+
+
+def apply_junior_mid_boost(result: dict, junior_mid: dict) -> None:
+    """Boost role/seniority dimensions when the JD explicitly targets this level."""
+    if junior_mid.get("status") != "positive":
+        return
+
+    scores = result.get("scores", {})
+    for dim, boost in (
+        ("role_match", JUNIOR_SIGNAL_ROLE_MATCH_BOOST),
+        ("seniority", JUNIOR_SIGNAL_SENIORITY_BOOST),
+    ):
+        if dim in scores:
+            scores[dim] = round(min(5.0, float(scores[dim]) + boost), 1)
+    result["junior_mid_signal"] = junior_mid
+    _recalculate_result_score(result)
 
 
 # ── Role archetype detection ─────────────────────────────────────────────────
@@ -575,7 +714,7 @@ def build_score_prompt(jd: dict, lean_cv: str, profile_context: str, calibration
         f"Description:\n{jd['description']}"
     )
 
-    return f"""\
+    prompt = f"""\
 Candidate profile:
 {lean_cv}
 
@@ -586,85 +725,32 @@ Candidate profile:
 Job description:
 {truncate_jd(jd_text)}
 
-Score this job for Renzo Rico given the profile above. Short-term, any solid data role with visa sponsorship and real technical data work is acceptable, but roles closer to the long-term archetypes should score better. Penalise anti-targets such as pure reporting, non-technical 'data', or clearly non-technical AI titles. Seniority must fit Renzo's junior-to-mid level. Strong product ML roles at good brands should generally lean higher than consulting-heavy roles, while consulting roles may still be acceptable as bridge options if stable and technical. Sponsorship negatives are already enforced by code and should not be rescued by high scores here. Keep the scoring dimensions exactly as defined below, but interpret role_match, skills_alignment, and seniority in light of this profile and calibration.
+Evaluate this role for Renzo Rico.
 
-Learning surface and growth
+Rubric:
+- A = exceptional fit worth prioritising immediately.
+- B = strong realistic fit worth tailoring now.
+- C = somewhat relevant or viable as a bridge role, but not worth tailoring now.
+- D/F = poor fit, weak learning surface, or effectively blocked.
 
-When you judge overall fit, explicitly consider the "learning surface" of the role:
+Calibration rules:
+- Be selective, but do not collapse good realistic matches into C/D by default.
+- Strong product, analytics, automation, experimentation, ML, or software-adjacent data roles should often land in B when the seniority is realistic.
+- Consulting or bridge roles can still be B or high-C if the work is technical, the stack is credible, and the role helps Renzo move forward.
+- Pure reporting, low-leverage dashboard maintenance, or clearly non-technical roles should score lower.
+- Seniority fit matters. Explicit junior/mid signals are positive evidence.
+- Sponsorship negatives are already handled by code. Sponsorship positives can modestly improve borderline calls when the role is otherwise solid.
+- If salary context is missing, keep compensation neutral rather than punitive.
 
-- Strong learning surface:
-  - Hands-on work with data or ML models (not just consuming dashboards).
-  - Ownership of analyses, models, or data products that influence real decisions.
-  - Exposure to experimentation, A/B tests, model iteration, or building/maintaining data pipelines or ML systems.
-  - Modern stack: SQL + Python/R + modern BI / analytics tools; for ML, common frameworks and cloud platforms.
-
-- Medium learning surface:
-  - Solid analytics and reporting that support decision-making, with some room for proactive analysis.
-  - Regular stakeholder interaction, explaining insights and helping shape decisions.
-  - Reasonable tools (SQL + at least one of Python/R/modern BI), but limited direct ownership of models or core data products.
-
-- Weak learning surface:
-  - Mostly ad-hoc or routine reporting, KPI refreshes, or dashboard maintenance.
-  - Little scope to propose or own analyses; work is largely reactive and task-based.
-  - Strong reliance on Excel or legacy tools, with limited access to raw data or modern tooling.
-  - Minimal exposure to experimentation, modelling, or end-to-end ownership.
-
-Use this learning-surface judgment as a soft factor when assigning the individual dimension scores:
-- Strong learning surface should push growth_trajectory and role_match scores up slightly when seniority and sponsorship are acceptable.
-- Medium learning surface is fine for "bridge" roles, especially if sponsorship and stability are present.
-- Weak learning surface should pull growth_trajectory down unless there is some compensating factor (for example, excellent sponsorship plus brand plus a clear path to a stronger data/ML track).
-
-Renzo long-term archetype (for context)
-
-Keep the following in mind when judging overall fit:
-
-- Long-term target: product-style data or ML roles in tech or tech-adjacent organisations (product companies, platforms, or strong internal data teams), where he can own or co-own data products, models, or critical analyses.
-- Roles that combine technical depth with teaching, communication, and stakeholder work are a plus; Renzo is comfortable explaining complex topics and working with non-technical partners.
-- Work on experimentation, agentic/AI systems, or data-driven product features is particularly attractive when seniority and sponsorship fit are reasonable.
-- Consulting or bridge roles are acceptable when they move him closer to this archetype (for example, strong technical consulting for data/ML, or analytics roles with good learning surface and sponsorship).
-
-If the job description explicitly mentions that visa sponsorship is available or supports relocation/sponsorship to the UK, treat this as a positive factor in your overall judgment:
-
-- Do not let sponsorship alone override very poor fit (for example, non-technical roles), but
-- When the role is at least moderately technical with medium learning surface and acceptable seniority, lean slightly more positive in your dimension scores, since sponsorship increases its practical value for Renzo.
-{f"""
-Market compensation context (use only to calibrate the compensation dimension score; if absent, treat compensation as uncertain rather than negative):
-{comp_context}
-""" if comp_context else ""}
-Respond ONLY with a single valid JSON object.
-
-Important:
-- The JSON must be syntactically valid and parseable by a strict JSON parser.
-- Do not include any markdown, backticks, or commentary outside the JSON.
-- Do not wrap the JSON in ```json``` or any other fences.
-- Escape any double quotes inside string values.
-- Do not include newline characters in JSON keys.
-- All array values (for example in top_keywords or similar fields) must be simple JSON strings without embedded newlines or unescaped quotes.
-- Do not leave trailing commas in arrays or objects.
-- Avoid fancy formatting; plain JSON is preferred.
-
-Use this exact schema:
-{{
-  "title": "<job title>",
-  "company": "<company name>",
-  "location": "<location>",
-  "salary_visible": "<salary or null>",
-  "scores": {{
-    "role_match": <0.0-5.0>,
-    "skills_alignment": <0.0-5.0>,
-    "seniority": <0.0-5.0>,
-    "compensation": <0.0-5.0>,
-    "interview_likelihood": <0.0-5.0>,
-    "geography": <0.0-5.0>,
-    "company_stage": <0.0-5.0>,
-    "product_interest": <0.0-5.0>,
-    "growth_trajectory": <0.0-5.0>,
-    "timeline": <0.0-5.0>
-  }},
-  "summary": "<A concise plain-text explanation of your reasoning, 3–6 sentences total. Use short sentences and paragraphs only. Do NOT use markdown syntax, including lists with '-', headings, or backticks. It is fine for this string to contain newlines, but it must still be valid JSON with proper quoting and escaping. Include a clearly marked plain-text sub-section starting with 'Bridge-role assessment: ...' that answers whether this would be a reasonable 12–24 month bridge role for Renzo and explain why or why not in 1–2 sentences within the overall 3–6 sentence limit.>",
-  "top_keywords": ["<5-8 JD keywords relevant to this candidate>"],
-  "interview_angle": "<Optional short note on how Renzo might pitch himself in an interview for this role, or null if not sure.>"
-}}"""
+Scoring guidance:
+- role_match, skills_alignment, and seniority should carry most of the decision weight.
+- growth_trajectory should reflect learning surface and ownership.
+- company_stage and product_interest matter, but should not overpower clear core fit.
+- Keep explanations concise and decision-useful. No chain-of-thought.
+"""
+    if comp_context:
+        prompt += f"\nMarket compensation context:\n{comp_context}\n"
+    return prompt
 
 
 def log_prompt_preview(prompt: str, limit: int = 20) -> None:
@@ -680,74 +766,10 @@ def log_instruction_block(profile_context: str, calibration_hints: str) -> None:
         print(f"[INSTR] {line}")
 
 
-def _safe_json_loads(raw: str):
-    raw_str = raw.strip()
-    try:
-        return json.loads(raw_str)
-    except json.JSONDecodeError as original_error:
-        last_brace = raw_str.rfind("}")
-        last_bracket = raw_str.rfind("]")
-        cutoff = max(last_brace, last_bracket)
-        if cutoff == -1:
-            raise original_error
-        trimmed = raw_str[:cutoff + 1]
-        try:
-            return json.loads(trimmed)
-        except json.JSONDecodeError:
-            raise original_error
-
-
-def _llm_call_with_retry(**kwargs) -> object:
-    """Wrapper around _client.messages.create with exponential backoff on 429."""
-    import anthropic
-    delay = 15
-    for attempt in range(4):
-        try:
-            return _client.messages.create(**kwargs)
-        except anthropic.RateLimitError:
-            if attempt == 3:
-                raise
-            print(f"[RATE LIMIT] 429 — waiting {delay}s before retry {attempt + 1}/3...")
-            time.sleep(delay)
-            delay = min(delay * 2, 120)
-
-
-def _repair_json_with_model(raw: str, error_message: str) -> str:
-    repair_prompt = f"""\
-You previously tried to output a JSON object but it was invalid.
-
-JSON parse error:
-{error_message}
-
-Your task now:
-- Read the original raw output between <raw> and </raw>.
-- Fix ONLY the formatting so it becomes valid JSON that a strict parser can load.
-- Do not change field names or add/remove fields.
-- If a string was cut off, you may truncate it to the last complete sentence, but do NOT invent new content.
-- Respond with a single valid JSON object only. No markdown, no code fences, no explanation.
-
-<raw>
-{raw}
-</raw>"""
-
-    response = _llm_call_with_retry(
-        model=MODEL,
-        max_tokens=512,
-        temperature=0,
-        system="You repair malformed JSON. Output a single valid JSON object only.",
-        messages=[{"role": "user", "content": repair_prompt}],
-    )
-    repaired = response.content[0].text.strip()
-    if repaired.startswith("```"):
-        repaired = re.sub(r"^```(?:json)?\s*", "", repaired)
-        repaired = re.sub(r"\s*```$", "", repaired).strip()
-    return repaired
-
-
 # ── Real scorer ───────────────────────────────────────────────────────────────
 
 def real_score(jd: dict, comp_context: str = "") -> dict:
-    """Call Claude Haiku to score a JD against the candidate profile."""
+    """Call the configured LLM to score a JD against the candidate profile."""
     lean_cv = build_lean_cv()
     profile = load_profile()
     profile_context = build_profile_context(profile)
@@ -756,52 +778,20 @@ def real_score(jd: dict, comp_context: str = "") -> dict:
     log_instruction_block(profile_context, calibration_hints)
     log_prompt_preview(user_prompt)
 
-    response = _llm_call_with_retry(
-        model=MODEL,
-        max_tokens=500,
-        system="You are a job-fit evaluator. Output valid JSON only. No explanation. No preamble.",
-        messages=[{"role": "user", "content": user_prompt}],
+    result, usage = run_job_evaluation(
+        system=(
+            "You are a job-fit evaluator. Return only the requested structured result. "
+            "Be concise and calibrated: B means strong realistic fit worth tailoring."
+        ),
+        prompt=user_prompt,
     )
-
-    # Cost reporting
-    usage = response.usage
-    cost = (usage.input_tokens * 0.25 + usage.output_tokens * 1.25) / 1_000_000
-    print(f"[COST] ~${cost:.5f} | {usage.input_tokens} in / {usage.output_tokens} out")
-
-    raw = response.content[0].text.strip()
-    # Strip markdown code fences if present
-    if raw.startswith("```"):
-        raw = re.sub(r"^```(?:json)?\s*", "", raw)
-        raw = re.sub(r"\s*```$", "", raw).strip()
-
-    try:
-        result = _safe_json_loads(raw)
-    except json.JSONDecodeError as exc:
-        try:
-            repaired_raw = _repair_json_with_model(raw, str(exc))
-            result = _safe_json_loads(repaired_raw)
-        except Exception:
-            EVALS_DIR.mkdir(parents=True, exist_ok=True)
-            with ERRORS_LOG.open("a", encoding="utf-8") as f:
-                f.write(f"\n--- {date.today().isoformat()} | {jd['company']} ---\n")
-                f.write(f"JSONDecodeError: {exc}\n")
-                f.write(raw + "\n")
-            print(f"[ERROR] Malformed JSON from API. Raw response saved to {ERRORS_LOG}")
-            raise exc
-
+    print(format_usage(usage, label="eval"))
     result["interview_angle"] = result.get("interview_angle")
+    result["summary"] = re.sub(r"\n{3,}", "\n\n", str(result.get("summary", "")).strip())
 
-    # Apply weighted scoring (falls back to equal weights if profile is missing any key)
-    scores = result.get("scores", {})
-    weights = load_profile().get("scoring_weights", {})
-    _dims = list(scores.keys())
-    if not weights or set(weights.keys()) != set(_dims):
-        print(f"[WARN] scoring_weights missing or incomplete in profile.yaml — using equal weights")
-        weights = {d: 1 / len(_dims) for d in _dims}
-    result["overall_score"] = round(sum(scores[d] * weights[d] for d in _dims), 1)
-    grade = result["overall_score"]
-    result["grade"] = "A" if grade >= 4.5 else "B" if grade >= 4.0 else "C" if grade >= 3.0 else "D" if grade >= 2.0 else "F"
-    result["recommended"] = result["overall_score"] >= 4.0
+    _recalculate_result_score(result)
+    result["llm_provider"] = usage.provider
+    result["llm_model"] = usage.model
 
     return result
 
@@ -812,6 +802,8 @@ def write_report(
     result: dict, url: str,
     jd: dict | None = None,
     sponsorship: dict | None = None,
+    salary_gate: dict | None = None,
+    junior_mid: dict | None = None,
 ) -> Path:
     today = date.today().isoformat()
     company_slug = slugify(result["company"])
@@ -841,6 +833,24 @@ def write_report(
         if sponsorship["status"] == "negative":
             sponsor_flag = " | ⛔ SPONSORSHIP GATE FAIL"
 
+    salary_flag = ""
+    salary_section = ""
+    if salary_gate and salary_gate.get("status") in {"high", "very_high"}:
+        salary_flag = " | ⛔ SALARY/SENIORITY GATE"
+        salary_section = (
+            f"\n## Salary Gate\n"
+            f"**Status:** {salary_gate['status'].upper()}"
+            f" | **Reason:** {salary_gate['reason']}"
+            f" | **Evidence:** `{salary_gate['evidence']}`\n"
+        )
+
+    junior_mid_section = ""
+    if junior_mid and junior_mid.get("status") == "positive":
+        junior_mid_section = (
+            f"\n## Junior/Mid Signal\n"
+            f"**Status:** POSITIVE | **Evidence:** `{junior_mid['evidence']}`\n"
+        )
+
     dimension_rows = "\n".join(
         f"| {dim.replace('_', ' ').title()} | {score} |"
         for dim, score in result["scores"].items()
@@ -855,14 +865,22 @@ def write_report(
         jd_text = desc.replace("[JD_SOURCE: REAL]\n", "").replace("[JD_SOURCE: MOCK]\n", "")[:1500]
         jd_section = f"\n## Job Description\n[JD_SOURCE: {jd_source}]\n{jd_text}\n"
 
+    mode_label = (
+        f"{result['llm_provider']}/{result['llm_model']}"
+        if result.get("llm_provider") and result.get("llm_model")
+        else describe_task_model("eval")
+    )
+
     report = f"""\
 # {result['title']} @ {result['company']}
-**Grade:** {result['grade']} | **Score:** {result['overall_score']}/5.0 | **Recommended:** {recommended_str}{sponsor_flag}
+**Grade:** {result['grade']} | **Score:** {result['overall_score']}/5.0 | **Recommended:** {recommended_str}{sponsor_flag}{salary_flag}
 **Archetype:** {result.get('archetype', 'ds-product')}
 **URL:** {url}
 **Date:** {today}
-**Mode:** REAL (Claude Haiku)
+**Mode:** REAL ({mode_label})
 {sponsor_section}
+{salary_section}
+{junior_mid_section}
 ## Verdict
 {result['summary']}
 
@@ -915,7 +933,7 @@ def parse_eval_file(eval_path: Path) -> dict:
         "company": company,
         "grade": grade,
         "overall_score": overall_score,
-        "recommended": overall_score >= 4.0,
+        "recommended": grade in {"A", "B"},
     }
 
 
@@ -935,7 +953,16 @@ def evaluate_url(url: str, force: bool = False) -> dict:
     if not force:
         existing = url_already_evaluated(url, history)
         if existing:
-            return {"skipped": True, "url": url, **existing}
+            eval_rel = existing.get("eval_path", "")
+            eval_path = REPO_ROOT / eval_rel if eval_rel else None
+            parsed = parse_eval_file(eval_path) if eval_path and eval_path.exists() else {}
+            return {
+                "skipped": True,
+                "url": url,
+                "eval_path": eval_path if eval_path and eval_path.exists() else eval_rel,
+                **existing,
+                **parsed,
+            }
 
     # Step 2 — JD extraction (real Playwright; mock fallback on failure)
     jd = extract_jd(url)
@@ -990,9 +1017,53 @@ def evaluate_url(url: str, force: bool = False) -> dict:
         return {"skipped": False, "url": url, "eval_path": eval_path,
                 "sponsorship": sponsorship, **result}
 
+    # Step 2.65 — salary band gate (deterministic, pre-LLM)
+    salary_gate = detect_salary_band_status(jd)
+    if salary_gate["status"] in {"high", "very_high"}:
+        print(f"[SALARY] GATE FAIL — {salary_gate['reason']} | {salary_gate['evidence']}")
+        if salary_gate["status"] == "very_high":
+            scores = dict(_ZERO_SCORES)
+            overall_score = 0.0
+            grade = "F"
+        else:
+            scores = {dim: 2.0 for dim in _ZERO_SCORES}
+            scores["compensation"] = 0.5
+            scores["seniority"] = 1.0
+            overall_score = 2.0
+            grade = "D"
+
+        result = {
+            "title": jd.get("title", "Unknown"),
+            "company": jd.get("company", "Unknown"),
+            "location": jd.get("location", ""),
+            "salary_visible": jd.get("salary"),
+            "scores": scores,
+            "overall_score": overall_score,
+            "grade": grade,
+            "recommended": False,
+            "summary": f"[SALARY GATE: FAIL] {salary_gate['reason']}. Target band is £45k-£60k.",
+            "top_keywords": [],
+            "interview_angle": None,
+        }
+        eval_path = write_report(
+            result,
+            url,
+            jd=jd,
+            sponsorship=sponsorship,
+            salary_gate=salary_gate,
+        )
+        append_scan_history(url, eval_path)
+        return {"skipped": False, "url": url, "eval_path": eval_path,
+                "sponsorship": sponsorship, "salary_gate": salary_gate, **result}
+
     # Step 2.7 — archetype detection (deterministic, pre-LLM)
     archetype = detect_archetype(jd.get("title", ""), jd.get("description", ""))
     print(f"[ARCHETYPE] {archetype}")
+
+    # Step 2.75 — junior/mid signal detection (deterministic boost after LLM)
+    junior_mid = detect_junior_mid_signals(jd.get("title", ""), jd.get("description", ""))
+    if junior_mid["status"] == "positive":
+        print(f"[JUNIOR/MID] POSITIVE — {junior_mid['evidence']}")
 
     # Step 2.8 — optional compensation benchmark (pre-LLM, only for real JDs without salary)
     comp_context = _fetch_comp_benchmark_if_useful(jd)
@@ -1002,15 +1073,23 @@ def evaluate_url(url: str, force: bool = False) -> dict:
     # Step 3 — real API scoring
     result = real_score(jd, comp_context=comp_context)
     result["archetype"] = archetype
+    apply_junior_mid_boost(result, junior_mid)
 
     # Step 4 — save report (pass jd + sponsorship so sections are embedded)
-    eval_path = write_report(result, url, jd=jd, sponsorship=sponsorship)
+    eval_path = write_report(
+        result,
+        url,
+        jd=jd,
+        sponsorship=sponsorship,
+        junior_mid=junior_mid,
+    )
 
     # Step 5 — update scan-history.tsv
     append_scan_history(url, eval_path)
 
     return {"skipped": False, "url": url, "eval_path": eval_path,
-            "sponsorship": sponsorship, **result}
+            "sponsorship": sponsorship, "salary_gate": salary_gate,
+            "junior_mid_signal": junior_mid, **result}
 
 
 # ── JD test helper ───────────────────────────────────────────────────────────
@@ -1019,7 +1098,7 @@ def test_jd_extraction() -> None:
     """Read first 3 URLs from scan-queue.txt and print extracted JD previews."""
     queue_path = REPO_ROOT / "scan-queue.txt"
     if not queue_path.exists() or not queue_path.read_text().strip():
-        print("scan-queue.txt is empty. Run scan.py first.")
+        print("scan-queue.txt is empty. Add one or more URLs before running --test-jd.")
         return
     urls = [u.strip() for u in queue_path.read_text().splitlines() if u.strip()][:3]
     for url in urls:
@@ -1037,19 +1116,28 @@ def test_jd_extraction() -> None:
 # ── Main ─────────────────────────────────────────────────────────────────────
 
 def main() -> None:
-    if len(sys.argv) == 2 and sys.argv[1] == "--test-jd":
+    parser = argparse.ArgumentParser(description="Evaluate a job URL and write a scored report to evals/.")
+    parser.add_argument("job_url", nargs="?", help="Job URL to evaluate.")
+    parser.add_argument("--force", action="store_true", help="Re-evaluate even if the URL is already in scan-history.tsv.")
+    parser.add_argument("--test-jd", action="store_true", help="Test JD extraction on the first three URLs in scan-queue.txt.")
+    parser.add_argument(
+        "--model",
+        help="LLM model override for this run. Overrides MODEL_OVERRIDE when provided.",
+    )
+    args = parser.parse_args()
+
+    if args.model:
+        os.environ["MODEL_OVERRIDE"] = args.model
+
+    if args.test_jd:
         test_jd_extraction()
         sys.exit(0)
 
-    force = "--force" in sys.argv
-    args = [a for a in sys.argv[1:] if a != "--force"]
-
-    if len(args) != 1:
-        print("Usage: python evaluate.py <job_url> [--force]")
-        print("       python evaluate.py --test-jd   (test JD extraction on scan-queue)")
+    if not args.job_url:
+        parser.print_usage()
         sys.exit(1)
 
-    result = evaluate_url(args[0], force=force)
+    result = evaluate_url(args.job_url, force=args.force)
 
     if result["skipped"]:
         print("Already evaluated. Skipping.")
@@ -1060,7 +1148,7 @@ def main() -> None:
     recommended_str = "YES ✓" if result["recommended"] else "NO ✗"
     eval_path = result["eval_path"]
     print()
-    print("[DS-RADAR] REAL MODE — Claude Haiku API call")
+    print(f"[DS-RADAR] REAL MODE — {describe_task_model('eval')}")
     print(f"Company:     {result['company']}")
     print(f"Role:        {result['title']}")
     print(f"Grade:       {result['grade']} | Score: {result['overall_score']}/5.0")
