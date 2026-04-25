@@ -1,9 +1,13 @@
 # Secrets
 .env
+.env.local
+.env.*
+!.env.example
 
 # Generated outputs — don't commit these
 evals/
 applications/
+*.pdf
 scan-history.tsv
 scan-queue.txt
 artifacts-index.jsonl

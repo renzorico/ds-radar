@@ -1,24 +1,22 @@
 # ds-radar
 
-`ds-radar` is an automated job scanning, evaluation, and tracking pipeline. It ingests job feeds, evaluates listings, records decisions in tabular state, and keeps the generated eval markdowns linked back to the tracker.
+`ds-radar` is a focused job evaluation and CV generation pipeline. It evaluates listings, writes scored markdown reports, and generates tailored CV artifacts from those reports.
 
-High-level flow: ingest CSV feeds -> evaluate listings -> update tracker state -> record eval history.
+High-level flow: evaluate listing -> write `evals/*.md` -> generate tailored CV markdown/PDF in `applications/`.
 
 ## Single Source Of Truth
 
 The live system is built around a small set of canonical files and directories:
 
-- `tracker.tsv` - master job/application table and the main operational state.
 - `scan-history.tsv` - append-style log of evaluation runs and eval link history.
 - `evals/` - canonical store for eval markdown files.
-- `csv-inbox/processed/` - provenance store for already ingested CSV feeds.
 - `source-history.tsv` - source-level history, when present and used by the current pipeline.
+- `profile/profile.yaml` - verified candidate facts used by scoring and CV tailoring.
+- `applications/` - generated CV markdown/PDF outputs.
 
 Key invariants:
 
-- Every non-empty `eval_path` in `tracker.tsv` points into `evals/`.
 - Every non-empty `eval_path` in `scan-history.tsv` points into `evals/`.
-- `pdf_path` in `tracker.tsv` is currently empty for all rows; generated CV PDFs are treated as ephemeral cache, not canonical history.
 - No live data or code reads from `archive/` or `backups/`.
 
 Notes:
@@ -28,41 +26,38 @@ Notes:
 
 ## Repository Structure
 
-- `tracker.tsv` - main job/application table (SSOT).
 - `scan-history.tsv` - evaluation run history (SSOT).
 - `source-history.tsv` - source ingestion history when the current pipeline uses it.
 - `evals/` - canonical eval markdowns (SSOT).
-- `csv-inbox/` - CSV intake area for new job feed exports.
-- `csv-inbox/processed/` - consumed CSV feeds kept for provenance (SSOT for ingestion history).
-- `scripts/` - pipeline and maintenance scripts, including scan, eval, repair, verify, PDF generation, and dashboard helpers.
-- `profile/` - configuration and prompt/persona assets used by the scanning and evaluation workflows.
+- `applications/` - generated CV markdown/PDF outputs.
+- `scripts/` - active pipeline scripts and direct dependencies.
+- `profile/` - verified candidate facts and targeting configuration.
 - `archive/` - historical snapshots such as `archive/2026-04-24/`; never read as live state.
-- `cv/` - optional cache of generated CV PDFs; safe to recreate.
 - `CLAUDE.md` - repo-local AI assistant notes and working instructions.
 - `artifacts-index.jsonl` - artifact metadata index used by parts of the pipeline.
-- `scan-queue.txt` - queue/input helper for scan runs when used.
 
 ## How The Pipeline Works
 
-1. Place new job feeds in `csv-inbox/incoming/` if you use a staging subdirectory, or directly in `csv-inbox/` in the current repo layout.
-2. Run the scan/eval pipeline from `scripts/`, typically via the main orchestration entrypoint such as `scripts/pipeline.py`, or the narrower helpers like `scripts/scan.py` and `scripts/evaluate.py`.
-3. The pipeline updates `tracker.tsv` with statuses, grades, notes, and `eval_path` links into `evals/`.
-4. Every eval run is recorded in `scan-history.tsv`.
-5. An optional CV generation step can write PDFs into `cv/` or `applications/`, but those files are cache outputs rather than canonical state.
+1. Run `python scripts/evaluate.py <job_url>` to score a job and write an eval report under `evals/`.
+2. Run `python scripts/generate_pdf.py <eval_path>` to rewrite the CV for that eval and render outputs under `applications/`.
+3. Both scripts accept `--model <model_name>`. If omitted, they use `MODEL_OVERRIDE` from `.env`, then fall back to `claude-haiku-4-5-20251001`.
+4. Every evaluation run is recorded in `scan-history.tsv`.
 
 ## Data Integrity & Repair
 
-- `scripts/repair_state.py` only consults live canonical locations: `tracker.tsv`, `scan-history.tsv`, `evals/`, live PDF cache paths, and the current repo state.
-- `scripts/repair_state.py` explicitly ignores archival prefixes: `archive/`, `backups/`, `backup_20260407/`, `evals_backup/`, and `applications_backup/`.
-- `scripts/repair_state.py` never migrates data from archived snapshots back into live TSVs or canonical directories.
-- `scripts/verify_pipeline.py` validates live data consistency and may suggest archiving or deleting orphaned files manually when it finds leftovers outside the canonical graph.
 - No script should ever read from `archive/` to repair, extend, or reconstruct live state.
-- All repairs must be derived from the canonical TSVs plus `evals/`, with PDF caches treated as optional secondary artifacts.
+- All tailoring facts must come from `profile/profile.yaml` plus the canonical eval markdown.
+- Generated PDFs are cache outputs; the markdown eval and CV files remain the durable artifacts.
 
 ## Contributing / Development Notes
 
-- Treat `tracker.tsv`, `scan-history.tsv`, and `evals/` as the only canonical history.
-- Treat `csv-inbox/processed/` as provenance for consumed feeds, not a place to rebuild canonical tracker state from scratch.
+- Treat `scan-history.tsv` and `evals/` as the canonical evaluation history.
 - Treat `archive/` as read-only historical context.
-- Treat `cv/` or `applications/` as cache directories that can be cleared or regenerated.
+- Treat `applications/` as generated output that can be regenerated from `evals/`.
 - New code must not reintroduce logic that reads historical backups to repair or mutate live state.
+
+## Setup
+
+1. Create `.env` from `.env.example`.
+2. Set `ANTHROPIC_API_KEY` for the default Haiku pipeline.
+3. Optionally set `MODEL_OVERRIDE` or pass `--model` per run.
