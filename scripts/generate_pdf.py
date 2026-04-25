@@ -3,7 +3,7 @@ ds-radar CV generator
 Usage: python generate_pdf.py <eval_path>
 Example: python generate_pdf.py evals/deepmind_2026-04-01.md
 
-If the eval contains a real JD ([JD_SOURCE: REAL]), calls Claude Haiku to
+If the eval contains a real JD ([JD_SOURCE: REAL]), calls the configured LLM to
 rewrite a canonical CV built from profile/profile.yaml tailored to that job.
 If JD is mock, falls back to keyword injection.
 Always writes Markdown CV to applications/cv_{company}_{YYYYMMDD}.md and
@@ -30,21 +30,95 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 PROFILE_PATH = REPO_ROOT / "profile" / "profile.yaml"
 APPLICATIONS_DIR = REPO_ROOT / "applications"
 
-# ── API client setup (same pattern as evaluate.py) ────────────────────────────
+CV_REWRITE_MAX_TOKENS = 2500
+GITHUB_PROFILE_URL = "https://github.com/renzorico"
+DEFAULT_CANDIDATE_TITLE = "Data Scientist | AI & Analytics Engineer"
 
-from dotenv import load_dotenv
-load_dotenv(REPO_ROOT / ".env")
+COMPANY_DESCRIPTIONS: dict[str, str] = {
+    "le wagon": (
+        "Le Wagon is an intensive coding bootcamp and tech education company that trains career-switchers "
+        "and professionals in software, data, and AI skills. It solves practical upskilling and employability "
+        "problems for learners and teams moving into technical roles."
+    ),
+    "bac engineering / socotec": (
+        "BAC Engineering / SOCOTEC operates in engineering, construction, and infrastructure delivery, supporting "
+        "the design and coordination work needed for complex built-environment projects. It helps project teams "
+        "and asset owners reduce risk, improve delivery quality, and keep technical information aligned."
+    ),
+    "bac engineering": (
+        "BAC Engineering works in engineering and construction project delivery, helping technical teams produce "
+        "coordinated models and documentation for infrastructure and built-environment projects. It solves "
+        "information-quality and coordination problems for project stakeholders and end clients."
+    ),
+    "socotec": (
+        "SOCOTEC provides testing, inspection, certification, and engineering services across the built "
+        "environment. It helps infrastructure, construction, and property clients manage compliance, quality, "
+        "and technical risk."
+    ),
+}
 
-_api_key = os.getenv("ANTHROPIC_API_KEY")
-if not _api_key:
-    print("[ERROR] ANTHROPIC_API_KEY not found. Add it to ds-radar/.env")
-    sys.exit(1)
+PROJECT_DETAILS: dict[str, dict[str, str]] = {
+    "ds-radar": {
+        "name": "ds-radar",
+        "tech": "Python, OpenAI API, Playwright",
+        "repo_url": "https://github.com/renzorico/ds-radar",
+        "summary": (
+            "AI-powered job search pipeline that scans roles, evaluates fit, generates tailored CVs, and tracks "
+            "applications."
+        ),
+    },
+    "no botes tu voto": {
+        "name": "No botes tu voto",
+        "tech": "FastAPI, Next.js, TypeScript, Railway",
+        "repo_url": "https://github.com/renzorico/colombia-matcher",
+        "summary": (
+            "Civic-tech platform for election guidance, described in the profile as supporting 10,000+ users."
+        ),
+    },
+    "the london bible": {
+        "name": "The London Bible",
+        "tech": "Python, GeoPandas, Leaflet",
+        "repo_url": "https://github.com/renzorico/the-london-bible",
+        "summary": "Interactive London data atlas built from public datasets and geospatial analysis.",
+    },
+    "adcc universe": {
+        "name": "ADCC Universe",
+        "tech": "React, TypeScript, Sigma.js",
+        "repo_url": "https://github.com/renzorico/bjj-universe",
+        "summary": "Grappling competition network graph and interactive relationship explorer.",
+    },
+    "un speeches nlp": {
+        "name": "UN Speeches NLP",
+        "tech": "Python, scikit-learn, Streamlit, BigQuery",
+        "repo_url": "https://github.com/renzorico/speeches-at-UN",
+        "summary": "NLP pipeline analysing 8,000+ UN General Debate speeches across time.",
+    },
+}
 
-import anthropic
-_client = anthropic.Anthropic(api_key=_api_key)
+SKILL_GROUPS = {
+    "Languages": ["Python (data + ML).", "SQL.", "JavaScript and TypeScript."],
+    "Data/ML": [
+        "Pandas / NumPy / scikit-learn.",
+        "TensorFlow/Keras.",
+        "NLP and UMAP.",
+        "LLMs and agentic AI systems.",
+    ],
+    "Web/Cloud/Tools": [
+        "FastAPI.",
+        "BigQuery and GCP.",
+        "Docker.",
+        "React.",
+        "Vercel and Railway.",
+        "Streamlit.",
+        "Git.",
+        "Linux / CLI-focused workflows.",
+    ],
+}
 
-MODEL = "claude-haiku-4-5-20251001"
-CV_REWRITE_MAX_TOKENS = 1500
+try:
+    from llm_provider import describe_task_model, format_usage, run_cv_tailoring
+except ImportError:  # pragma: no cover - module execution fallback
+    from scripts.llm_provider import describe_task_model, format_usage, run_cv_tailoring
 
 # ── ATS Unicode normalisation ─────────────────────────────────────────────────
 
@@ -72,6 +146,56 @@ def slugify(text: str) -> str:
 
 def strip_html_comments(text: str) -> str:
     return re.sub(r"<!--[\s\S]*?-->", "", text).strip()
+
+
+def _first_non_empty(values: list[str]) -> str:
+    for value in values:
+        clean = str(value).strip()
+        if clean:
+            return clean
+    return ""
+
+
+def _project_key(project_text: str) -> str:
+    head = str(project_text).split(":", 1)[0].strip()
+    return re.sub(r"\s+", " ", head).lower()
+
+
+def _parse_experience_item(item: str) -> dict[str, str]:
+    match = re.match(r"^(?P<title>.+?)\s+[—–-]\s+(?P<company>.+?),\s+(?P<location>.+?)\s+\((?P<dates>.+)\)$", item)
+    if not match:
+        match = re.match(r"^(?P<title>.+?)\s+[—–-]\s+(?P<company>.+?)\s+\((?P<dates>.+)\)$", item)
+    if match:
+        data = match.groupdict()
+        data.setdefault("location", "")
+        data["company_description"] = COMPANY_DESCRIPTIONS.get(data["company"].strip().lower(), "")
+        return data
+    return {
+        "title": item.strip(),
+        "company": "",
+        "location": "",
+        "dates": "",
+        "company_description": "",
+    }
+
+
+def _parse_education_item(item: str) -> dict[str, str]:
+    match = re.match(r"^(?P<degree>.+?)\s+[—–-]\s+(?P<institution>.+?)\s+\((?P<dates>.+)\)$", item)
+    if match:
+        return match.groupdict()
+    return {"degree": item.strip(), "institution": "", "dates": ""}
+
+
+def _project_record(item: str) -> dict[str, str]:
+    key = _project_key(item)
+    details = PROJECT_DETAILS.get(key, {})
+    name = details.get("name") or item.split(":", 1)[0].strip()
+    return {
+        "name": name,
+        "summary": details.get("summary", item.strip()),
+        "tech": details.get("tech", ""),
+        "repo_url": details.get("repo_url", ""),
+    }
 
 
 # ── Step 1: Parse eval report ─────────────────────────────────────────────────
@@ -216,53 +340,90 @@ def build_canonical_cv(profile: dict) -> str:
 
     name = identity.get("name", "Renzo Rico").strip()
     location = identity.get("location", "").strip()
+    role_title = DEFAULT_CANDIDATE_TITLE
     contact_parts = [
         location,
         contact.get("email", "").strip(),
         contact.get("phone", "").strip(),
         contact.get("linkedin_url", "").strip(),
+        GITHUB_PROFILE_URL,
     ]
     meta_line = " | ".join(part for part in contact_parts if part)
 
-    experience_items = [str(item).strip() for item in profile.get("experience", []) if str(item).strip()]
-    education_items = [str(item).strip() for item in profile.get("education", []) if str(item).strip()]
-    project_items = [str(item).strip() for item in profile.get("projects", []) if str(item).strip()]
+    experience_items = [_parse_experience_item(str(item).strip()) for item in profile.get("experience", []) if str(item).strip()]
+    education_items = [_parse_education_item(str(item).strip()) for item in profile.get("education", []) if str(item).strip()]
+    project_items = [_project_record(str(item).strip()) for item in profile.get("projects", []) if str(item).strip()]
     strong_skills = [str(item).strip() for item in tech.get("strong_skills", []) if str(item).strip()]
     must_match = [str(item).strip() for item in tech.get("must_match_skills", []) if str(item).strip()]
 
     summary_parts: list[str] = []
     if location:
-        summary_parts.append(f"Data Scientist based in {location}.")
-    else:
-        summary_parts.append("Data Scientist.")
+        summary_parts.append(f"{role_title} based in {location}.")
     if experience_items:
-        summary_parts.append(f"Current work includes {experience_items[0]}.")
+        lead_role = experience_items[0]
+        lead_company = _first_non_empty([lead_role.get("company", ""), "recent employers"])
+        summary_parts.append(
+            f"Experience spans technical delivery across {lead_company} and freelance product work."
+        )
     skill_summary = _compact_list(_unique(strong_skills[:4] + must_match), 6)
     if skill_summary:
         summary_parts.append(f"Core skills: {skill_summary}.")
 
     lines = [f"# {name}"]
+    lines.extend(["", role_title])
     if meta_line:
         lines.extend(["", meta_line])
 
     lines.extend(["", "## Summary", " ".join(summary_parts).strip()])
 
-    if experience_items:
-        lines.extend(["", "## Experience"])
-        lines.extend(f"- {item}" for item in experience_items)
+    skill_lines: list[str] = []
+    for label, items in SKILL_GROUPS.items():
+        available = [item for item in items if item in strong_skills or item.rstrip(".").lower() in {s.rstrip('.').lower() for s in strong_skills + must_match}]
+        if available:
+            skill_lines.append(f"- **{label}:** {', '.join(available)}")
+    if not skill_lines:
+        skill_lines = [f"- **Core:** {', '.join(_unique(strong_skills or must_match))}"]
+    lines.extend(["", "## Skills"])
+    lines.extend(skill_lines)
 
     if project_items:
         lines.extend(["", "## Projects"])
-        lines.extend(f"- {item}" for item in project_items)
+        for project in project_items[:5]:
+            project_heading = f"### {project['name']}"
+            if project.get("tech"):
+                project_heading += f" ({project['tech']})"
+            lines.extend(["", project_heading])
+            if project.get("repo_url"):
+                lines.append(f"Repository: {project['repo_url']}")
+            if project.get("summary"):
+                lines.append(f"- {project['summary']}")
+
+    if experience_items:
+        lines.extend(["", "## Experience"])
+        for experience in experience_items:
+            heading_bits = [experience.get("title", "").strip(), experience.get("company", "").strip()]
+            heading = " - ".join(part for part in heading_bits if part)
+            meta_bits = [experience.get("location", "").strip(), experience.get("dates", "").strip()]
+            lines.extend(["", f"### {heading}"])
+            if any(meta_bits):
+                lines.append(" | ".join(part for part in meta_bits if part))
+            if experience.get("company_description"):
+                lines.append(experience["company_description"])
+            lines.append("- Add role-relevant bullets grounded in the verified profile and job description.")
 
     if education_items:
         lines.extend(["", "## Education"])
-        lines.extend(f"- {item}" for item in education_items)
-
-    skill_items = _unique(strong_skills or must_match)
-    if skill_items:
-        lines.extend(["", "## Skills"])
-        lines.extend(f"- {item}" for item in skill_items)
+        for education in education_items:
+            degree = education.get("degree", "").strip()
+            institution = education.get("institution", "").strip()
+            dates = education.get("dates", "").strip()
+            if institution:
+                line = f"- **{degree}** - {institution}"
+            else:
+                line = f"- **{degree}**"
+            if dates:
+                line += f" ({dates})"
+            lines.append(line)
 
     return "\n".join(lines).strip() + "\n"
 
@@ -271,38 +432,85 @@ def build_profile_fact_block(profile: dict) -> str:
     identity = profile.get("identity", {}) or {}
     contact = profile.get("contact", {}) or {}
     tech = profile.get("tech_stack", {}) or {}
+    experience_items = [_parse_experience_item(str(item).strip()) for item in profile.get("experience", []) if str(item).strip()]
+    education_items = [_parse_education_item(str(item).strip()) for item in profile.get("education", []) if str(item).strip()]
+    project_items = [_project_record(str(item).strip()) for item in profile.get("projects", []) if str(item).strip()]
+    skill_lines = [
+        f"- {label}: {', '.join(items)}"
+        for label, items in SKILL_GROUPS.items()
+    ]
     lines = [
         f"- name: {identity.get('name', '').strip()}",
+        f"- target_title: {DEFAULT_CANDIDATE_TITLE}",
         f"- location: {identity.get('location', '').strip()}",
-        f"- contact: {_compact_list([contact.get('email', ''), contact.get('phone', ''), contact.get('linkedin_url', '')], 3) or 'n/a'}",
-        f"- experience: {_compact_list(profile.get('experience', []), 4) or 'n/a'}",
-        f"- education: {_compact_list(profile.get('education', []), 3) or 'n/a'}",
-        f"- projects: {_compact_list(profile.get('projects', []), 5) or 'n/a'}",
-        f"- skills: {_compact_list(tech.get('strong_skills', []), 8) or 'n/a'}",
+        f"- email: {contact.get('email', '').strip()}",
+        f"- phone: {contact.get('phone', '').strip()}",
+        f"- linkedin: {contact.get('linkedin_url', '').strip()}",
+        f"- github: {GITHUB_PROFILE_URL}",
+        "- recruiter_priorities: qualifications, similar experience, visible GitHub profile, visible repo links, skimmable XYZ bullets, education last",
+        "- experience:",
     ]
+    for item in experience_items:
+        lines.append(
+            "  - "
+            f"title={item.get('title', '')}; company={item.get('company', '')}; "
+            f"location={item.get('location', '')}; dates={item.get('dates', '')}; "
+            f"company_description={item.get('company_description', '') or 'n/a'}"
+        )
+    lines.append("- projects:")
+    for item in project_items[:5]:
+        lines.append(
+            "  - "
+            f"name={item.get('name', '')}; repo_url={item.get('repo_url', '') or 'n/a'}; "
+            f"tech={item.get('tech', '') or 'n/a'}; summary={item.get('summary', '')}"
+        )
+    lines.append("- education:")
+    for item in education_items:
+        lines.append(
+            "  - "
+            f"degree={item.get('degree', '')}; institution={item.get('institution', '')}; dates={item.get('dates', '')}"
+        )
+    lines.append("- grouped_skills:")
+    lines.extend(f"  {line}" for line in skill_lines)
+    lines.append(f"- verified_skills: {_compact_list(tech.get('strong_skills', []), 12) or 'n/a'}")
     return "\n".join(lines)
 
 
-# ── Step 3a: Claude CV rewrite (REAL JD path) ────────────────────────────────
+# ── Step 3a: Provider-backed CV rewrite (REAL JD path) ───────────────────────
 
 _CV_REWRITE_PROMPT = """\
 Rewrite the CV below tailored to the job description provided.
 
-Rules:
+=== CONTENT RULES (mandatory) ===
 - All factual content must come from the provided structured profile data and canonical CV.
 - You may reorder, rephrase, condense, and selectively omit items, but you may not invent any facts.
 - Never fabricate employers, clients, institutions, degrees, certifications, dates, locations, projects, or skills.
 - If a field is absent from the provided profile data, omit it; never guess.
 - Reorder bullets so the most relevant experience for this JD comes first.
-- Rewrite the professional summary as a 2-sentence exit narrative: sentence 1 frames the candidate's current work ({experience_0_title} at {experience_0_company}) as the foundation, sentence 2 connects it forward to the target role ({role} at {company}). Do not use generic phrases like "passionate about" or "seeking opportunities".
-- Keep the same sections as the canonical CV unless there is a strong reason to drop one.
 - Inject important JD keywords naturally — no keyword stuffing.
-- Output a complete CV in GitHub-flavoured Markdown only. No preamble, no explanation.
+- Rewrite the professional summary as 2 sentences: sentence 1 grounds the candidate in their current work; sentence 2 connects it forward to this role ({role} at {company}). Avoid generic phrases like "passionate about" or "seeking opportunities".
+- Keep the same sections as the canonical CV unless there is a strong reason to drop one.
 
-Candidate fit grade: {grade}
+=== SECTION ORDER (follow exactly) ===
+1. Contact / meta line (name already in H1 header — do not repeat it)
+2. Summary (2 sentences)
+3. Experience
+4. Projects
+5. Skills
+6. Education
+
+=== FORMATTING RULES ===
+- Output a complete CV in GitHub-flavoured Markdown only. No preamble, no explanation, no code fences.
+- Every bullet under Experience and Projects must follow the XYZ pattern: "Accomplished [X] by doing [Y], resulting in [Z]." Use real numbers from the profile where available.
+- Include the GitHub URL for each project where the profile provides one. Format: (github.com/...) inline after the project name.
+- For each Experience entry, add a 1-sentence company blurb in italics below the job title line if the company is well-known enough to describe (skip if freelance or self-employed).
+- Do not add a page-count note or any meta-commentary.
+
+=== CANDIDATE FIT ===
+Grade: {grade}
 Dimension scores: {scores_str}
 
-VERIFIED PROFILE FACTS:
+=== VERIFIED PROFILE FACTS ===
 {profile_facts}
 
 ---
@@ -314,8 +522,7 @@ CANONICAL CV:
 {cv_text}"""
 
 
-def rewrite_cv_with_claude(parsed: dict, base_cv: str, profile_facts: str,
-                           experience_0_title: str = "", experience_0_company: str = "") -> str:
+def rewrite_cv_with_model(parsed: dict, base_cv: str, profile_facts: str) -> str:
     scores_str = " | ".join(
         f"{k.replace('_', ' ').title()}: {v}"
         for k, v in parsed["dim_scores"].items()
@@ -328,22 +535,18 @@ def rewrite_cv_with_claude(parsed: dict, base_cv: str, profile_facts: str,
         cv_text=base_cv,
         role=parsed["role"],
         company=parsed["company"],
-        experience_0_title=experience_0_title,
-        experience_0_company=experience_0_company,
     )
 
-    response = _client.messages.create(
-        model=MODEL,
-        max_tokens=CV_REWRITE_MAX_TOKENS,
-        system="You are a professional CV writer. Output clean Markdown only.",
-        messages=[{"role": "user", "content": prompt}],
+    text, usage = run_cv_tailoring(
+        system=(
+            "You are a professional CV writer. Output clean Markdown only. "
+            "Be concise, credible, and specific. No fluff."
+        ),
+        prompt=prompt,
+        max_output_tokens=CV_REWRITE_MAX_TOKENS,
     )
-
-    usage = response.usage
-    cost = (usage.input_tokens * 0.25 + usage.output_tokens * 1.25) / 1_000_000
-    print(f"[COST] cv_rewrite ~${cost:.5f} | {usage.input_tokens} in / {usage.output_tokens} out")
-
-    return response.content[0].text.strip()
+    print(format_usage(usage, label="cv_rewrite"))
+    return text.strip()
 
 
 # ── Step 3b: Keyword injection fallback (MOCK JD path) ───────────────────────
@@ -389,7 +592,12 @@ def save_cv(
         f"<!-- Job key: {job_key} -->\n"
         f"<!-- Interview angle: {interview_angle} -->\n\n"
     )
-    output_path.write_text(header + cv, encoding="utf-8")
+    try:
+        output_path.write_text(header + cv, encoding="utf-8")
+    except OSError as exc:
+        raise OSError(f"Failed to write CV markdown to {output_path}") from exc
+    if not output_path.exists():
+        raise FileNotFoundError(f"CV markdown was not created at {output_path}")
     record_artifact_identity(
         output_path,
         url=url,
@@ -588,6 +796,8 @@ def render_pdf(html_content: str, output_path: Path) -> Path:
         finally:
             browser.close()
 
+    if not output_path.exists():
+        raise FileNotFoundError(f"PDF render completed without creating {output_path}")
     return output_path
 
 
@@ -616,21 +826,22 @@ def generate_pdf(eval_path: "Path | str") -> str:
     base_cv = build_canonical_cv(profile)
     profile_facts = build_profile_fact_block(profile)
 
-    print(f"CV_REWRITE company={parsed['company']} grade={parsed['grade']} jd_source={parsed['jd_source']}")
-
-    exp0_raw = next((str(e).strip() for e in profile.get("experience", []) if str(e).strip()), "")
-    exp0_parts = re.split(r"\s+[—–-]+\s+|\s+at\s+", exp0_raw, maxsplit=1)
-    experience_0_title = exp0_parts[0].strip() if exp0_parts else ""
-    experience_0_company = re.split(r"\s*\(", exp0_parts[1], maxsplit=1)[0].strip() if len(exp0_parts) > 1 else ""
+    print(
+        f"CV_REWRITE company={parsed['company']} grade={parsed['grade']} "
+        f"jd_source={parsed['jd_source']} model={describe_task_model('cv')}"
+    )
 
     if parsed["jd_source"] == "REAL" and parsed["jd_text"]:
-        tailored_cv = rewrite_cv_with_claude(parsed, base_cv, profile_facts,
-                                             experience_0_title, experience_0_company)
+        tailored_cv = rewrite_cv_with_model(
+            parsed,
+            base_cv,
+            profile_facts,
+        )
     else:
         if parsed["jd_source"] != "REAL":
-            print("[WARN] JD_SOURCE is MOCK — Claude rewrite skipped, using keyword injection")
+            print("[WARN] JD_SOURCE is MOCK — provider rewrite skipped, using keyword injection")
         elif not parsed["jd_text"]:
-            print("[WARN] JD text missing from eval — Claude rewrite skipped, using keyword injection")
+            print("[WARN] JD text missing from eval — provider rewrite skipped, using keyword injection")
         tailored_cv = inject_keywords(base_cv, parsed["keywords"])
 
     keywords = parsed.get("keywords", [])
@@ -645,6 +856,8 @@ def generate_pdf(eval_path: "Path | str") -> str:
     # TODO: pass keyword_coverage_* into save_cv() header comment or tracker notes field
 
     markdown_path, pdf_path = build_output_paths(parsed["company"])
+    print(f"[CV] Target markdown: {markdown_path.relative_to(REPO_ROOT)}")
+    print(f"[CV] Target PDF: {pdf_path.relative_to(REPO_ROOT)}")
     save_cv(
         tailored_cv,
         markdown_path,
@@ -659,6 +872,8 @@ def generate_pdf(eval_path: "Path | str") -> str:
         keyword_coverage_total=keyword_coverage_total,
         keyword_coverage_pct=keyword_coverage_pct,
     )
+    if not markdown_path.exists():
+        raise FileNotFoundError(f"Expected markdown output missing after save: {markdown_path}")
     print(f"[CV] Markdown saved: {markdown_path.relative_to(REPO_ROOT)}")
 
     try:
@@ -674,7 +889,10 @@ def generate_pdf(eval_path: "Path | str") -> str:
         print(f"[CV] PDF saved: {pdf_path.relative_to(REPO_ROOT)}")
         return str(pdf_path.relative_to(REPO_ROOT))
     except Exception as exc:
-        print(f"[WARN] PDF render failed ({exc}) — Markdown kept at {markdown_path.relative_to(REPO_ROOT)}")
+        print(
+            f"[WARN] PDF render failed for {pdf_path.relative_to(REPO_ROOT)} "
+            f"({exc}) — Markdown kept at {markdown_path.relative_to(REPO_ROOT)}"
+        )
         return str(markdown_path.relative_to(REPO_ROOT))
 
 
