@@ -36,9 +36,11 @@ TRACKER_HEADER = [
 
 GRADE_ORDER = {"A": 0, "B": 1, "C": 2, "D": 3, "F": 4}
 FILTER_OPTIONS = [
-    "all", "linkedin", "boards", "b_plus", "ready",
-    "applied", "interview", "callback", "rejected", "sponsorship_fail",
+    "all", "a_plus", "b_plus", "to_apply",
+    "applied", "callback", "interview", "rejected",
 ]
+
+REJECTION_NOTE_PREFIX = "reject:"
 
 
 @dataclass
@@ -69,6 +71,35 @@ class JobRecord:
 
     def to_json(self) -> str:
         return json.dumps(self.to_dict(), indent=2)
+
+
+def extract_rejection_reason(notes: str) -> str:
+    for part in (notes or "").split("|"):
+        token = part.strip().lower()
+        if token.startswith(REJECTION_NOTE_PREFIX):
+            return token.removeprefix(REJECTION_NOTE_PREFIX).strip()
+    return ""
+
+
+def upsert_rejection_reason(notes: str, reason: str) -> str:
+    parts = []
+    for part in (notes or "").split("|"):
+        cleaned = part.strip()
+        if cleaned and not cleaned.lower().startswith(REJECTION_NOTE_PREFIX):
+            parts.append(cleaned)
+    if reason:
+        parts.append(f"{REJECTION_NOTE_PREFIX}{reason}")
+    return " | ".join(parts)
+
+
+def normalize_record_status(status: str, notes: str = "") -> tuple[str, str]:
+    lowered = (status or "").strip().lower()
+    reason = extract_rejection_reason(notes)
+    if lowered in {"sponsorship_fail", "seniority_fail"}:
+        return "rejected", lowered
+    if lowered == "rejected":
+        return "rejected", reason
+    return lowered, reason
 
 
 def slugify(text: str) -> str:
@@ -438,25 +469,148 @@ def sort_records(records: list[JobRecord], sort_by: str) -> list[JobRecord]:
 
 
 def filter_records(records: list[JobRecord], filter_name: str) -> list[JobRecord]:
+    if filter_name == "a_plus":
+        return [r for r in records if grade_passes(r.grade, "A")]
     if filter_name == "b_plus":
         return [r for r in records if grade_passes(r.grade, "B+")]
-    if filter_name == "linkedin":
-        return [r for r in records if r.source == "linkedin"]
-    if filter_name == "boards":
-        return [r for r in records if r.source and r.source != "linkedin"]
-    if filter_name == "ready":
-        return [r for r in records if r.ready_to_apply and grade_passes(r.grade, "B+")]
+    if filter_name == "to_apply":
+        return [r for r in records if (r.status or "").lower() == "cv_ready"]
     if filter_name == "applied":
         return [r for r in records if (r.status or "").lower() == "applied"]
-    if filter_name == "interview":
-        return [r for r in records if (r.status or "").lower() == "interview"]
     if filter_name == "callback":
         return [r for r in records if (r.status or "").lower() == "callback"]
+    if filter_name == "interview":
+        return [r for r in records if (r.status or "").lower() == "interview"]
     if filter_name == "rejected":
-        return [r for r in records if (r.status or "").lower() == "rejected"]
-    if filter_name == "sponsorship_fail":
-        return [r for r in records if r.spons == "FAIL"]
+        return [r for r in records if (r.status or "").lower() in {"rejected", "sponsorship_fail", "seniority_fail"}]
     return list(records)
+
+
+def load_dashboard_records(sort_by: str = "date") -> list[JobRecord]:
+    tracker_rows = load_tsv(TRACKER)
+    records: list[JobRecord] = []
+    for row in tracker_rows:
+        status, rejection_reason = normalize_record_status(
+            row.get("status", ""),
+            row.get("notes", ""),
+        )
+        notes = row.get("notes", "").strip()
+        if rejection_reason:
+            notes = upsert_rejection_reason(notes, rejection_reason)
+        records.append(
+            JobRecord(
+                date=row.get("date", "").strip(),
+                grade=row.get("grade", "?").strip(),
+                score=row.get("score", "?").strip(),
+                source="linkedin",
+                jd_src="REAL",
+                spons="FAIL" if rejection_reason == "sponsorship_fail" else "PASS",
+                cv="?",
+                ofe="?",
+                con="?",
+                company=row.get("company", "?").strip(),
+                role=row.get("role", "?").strip(),
+                status=status,
+                url=row.get("url", "").strip(),
+                notes=notes,
+                eval_path="",
+                eval_excerpt="",
+                cv_path=row.get("pdf_path", "").strip(),
+                oferta_path="",
+                outreach_path="",
+                ready_to_apply=status == "cv_ready",
+            )
+        )
+    return sort_records(records, sort_by)
+
+
+def _build_enriched_job_record(
+    row: dict,
+    source_index: dict[str, dict],
+    scan_index: dict[str, dict],
+    artifact_index: dict[str, dict],
+    eval_job_keys: dict[str, str],
+    rows_by_company_date: dict[tuple[str, str], list[dict]],
+) -> JobRecord:
+    company = row.get("company", "?").strip()
+    role = row.get("role", "?").strip()
+    url = row.get("url", "").strip()
+    raw_status = row.get("status", "").strip()
+    notes = row.get("notes", "").strip()
+    source = infer_source(url, source_index)
+    eval_path = find_eval(row, scan_index)
+    related_rows = rows_by_company_date.get(_company_date_key(row), [])
+
+    if raw_status == "sponsorship_fail":
+        jd_src, spons = notes if notes in ("REAL", "MOCK") else "?", "FAIL"
+        jd_src, _ = read_eval_meta(eval_path, notes)
+    else:
+        jd_src, spons = read_eval_meta(eval_path, notes)
+
+    oferta_path = resolve_related_artifact(
+        row, company, role, related_rows, EVALS_DIR, "deep_{slug}_*.md", artifact_index, eval_job_keys
+    )
+    outreach_path = resolve_related_artifact(
+        row, company, role, related_rows, APPLICATIONS, "outreach_{slug}_*.md", artifact_index, eval_job_keys
+    )
+    cv_path = resolve_cv_path(row, company, role, related_rows, artifact_index, eval_job_keys)
+
+    excerpt = extract_markdown_section(oferta_path, ["## 1. Executive Summary"])
+    if not excerpt:
+        excerpt = extract_markdown_section(eval_path, ["## Verdict", "## 1. Executive Summary"])
+
+    has_cv = "yes" if cv_path else "no"
+    has_ofe = "yes" if oferta_path else "no"
+    has_con = "yes" if outreach_path else "no"
+    ready_to_apply = has_cv == "yes" and has_ofe == "yes" and has_con == "yes" and spons == "PASS"
+
+    return JobRecord(
+        date=row.get("date", "").strip(),
+        grade=row.get("grade", "?").strip(),
+        score=row.get("score", "?").strip(),
+        source=source,
+        jd_src=jd_src,
+        spons=spons,
+        cv=has_cv,
+        ofe=has_ofe,
+        con=has_con,
+        company=company,
+        role=role,
+        status=raw_status,
+        url=url,
+        notes=notes,
+        eval_path=str(eval_path.relative_to(REPO_ROOT)) if eval_path else "",
+        eval_excerpt=excerpt,
+        cv_path=str(cv_path.relative_to(REPO_ROOT)) if cv_path else "",
+        oferta_path=str(oferta_path.relative_to(REPO_ROOT)) if oferta_path else "",
+        outreach_path=str(outreach_path.relative_to(REPO_ROOT)) if outreach_path else "",
+        ready_to_apply=ready_to_apply,
+    )
+
+
+def load_dashboard_record_detail(url: str) -> JobRecord | None:
+    tracker_rows = load_tsv(TRACKER)
+    row = next((item for item in tracker_rows if item.get("url", "").strip() == url.strip()), None)
+    if row is None:
+        return None
+
+    source_index = build_index(load_tsv(SOURCE_HISTORY), "target_url")
+    scan_rows = load_tsv(SCAN_HISTORY)
+    scan_index = build_index(scan_rows, "url")
+    artifact_index = load_artifact_index()
+    eval_job_keys = build_eval_job_key_map(tracker_rows, scan_rows)
+    rows_by_company_date: dict[tuple[str, str], list[dict]] = {}
+    for tracker_row in tracker_rows:
+        rows_by_company_date.setdefault(_company_date_key(tracker_row), []).append(tracker_row)
+
+    return _build_enriched_job_record(
+        row,
+        source_index,
+        scan_index,
+        artifact_index,
+        eval_job_keys,
+        rows_by_company_date,
+    )
 
 
 def load_job_records(sort_by: str = "date") -> list[JobRecord]:
@@ -472,60 +626,14 @@ def load_job_records(sort_by: str = "date") -> list[JobRecord]:
 
     records: list[JobRecord] = []
     for row in tracker_rows:
-        company = row.get("company", "?").strip()
-        role = row.get("role", "?").strip()
-        url = row.get("url", "").strip()
-        status = row.get("status", "").strip()
-        notes = row.get("notes", "").strip()
-        source = infer_source(url, source_index)
-        eval_path = find_eval(row, scan_index)
-        related_rows = rows_by_company_date.get(_company_date_key(row), [])
-
-        if status == "sponsorship_fail":
-            jd_src, spons = notes if notes in ("REAL", "MOCK") else "?", "FAIL"
-            jd_src, _ = read_eval_meta(eval_path, notes)
-        else:
-            jd_src, spons = read_eval_meta(eval_path, notes)
-
-        oferta_path = resolve_related_artifact(
-            row, company, role, related_rows, EVALS_DIR, "deep_{slug}_*.md", artifact_index, eval_job_keys
-        )
-        outreach_path = resolve_related_artifact(
-            row, company, role, related_rows, APPLICATIONS, "outreach_{slug}_*.md", artifact_index, eval_job_keys
-        )
-        cv_path = resolve_cv_path(row, company, role, related_rows, artifact_index, eval_job_keys)
-
-        excerpt = extract_markdown_section(oferta_path, ["## 1. Executive Summary"])
-        if not excerpt:
-            excerpt = extract_markdown_section(eval_path, ["## Verdict", "## 1. Executive Summary"])
-
-        has_cv = "yes" if cv_path else "no"
-        has_ofe = "yes" if oferta_path else "no"
-        has_con = "yes" if outreach_path else "no"
-        ready_to_apply = has_cv == "yes" and has_ofe == "yes" and has_con == "yes" and spons == "PASS"
-
         records.append(
-            JobRecord(
-                date=row.get("date", "").strip(),
-                grade=row.get("grade", "?").strip(),
-                score=row.get("score", "?").strip(),
-                source=source,
-                jd_src=jd_src,
-                spons=spons,
-                cv=has_cv,
-                ofe=has_ofe,
-                con=has_con,
-                company=company,
-                role=row.get("role", "?").strip(),
-                status=status,
-                url=url,
-                notes=notes,
-                eval_path=str(eval_path.relative_to(REPO_ROOT)) if eval_path else "",
-                eval_excerpt=excerpt,
-                cv_path=str(cv_path.relative_to(REPO_ROOT)) if cv_path else "",
-                oferta_path=str(oferta_path.relative_to(REPO_ROOT)) if oferta_path else "",
-                outreach_path=str(outreach_path.relative_to(REPO_ROOT)) if outreach_path else "",
-                ready_to_apply=ready_to_apply,
+            _build_enriched_job_record(
+                row,
+                source_index,
+                scan_index,
+                artifact_index,
+                eval_job_keys,
+                rows_by_company_date,
             )
         )
 
@@ -537,7 +645,18 @@ def update_tracker_status(url: str, status: str) -> bool:
     changed = False
     for row in rows:
         if row.get("url", "").strip() == url.strip():
-            row["status"] = status
+            if status == "sponsorship_fail":
+                row["status"] = "rejected"
+                row["notes"] = upsert_rejection_reason(row.get("notes", ""), "sponsorship_fail")
+            elif status == "seniority_fail":
+                row["status"] = "rejected"
+                row["notes"] = upsert_rejection_reason(row.get("notes", ""), "seniority_fail")
+            elif status == "rejected":
+                row["status"] = "rejected"
+                row["notes"] = upsert_rejection_reason(row.get("notes", ""), "")
+            else:
+                row["status"] = status
+                row["notes"] = upsert_rejection_reason(row.get("notes", ""), "")
             changed = True
             break
 
