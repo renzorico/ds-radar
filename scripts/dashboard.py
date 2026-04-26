@@ -146,6 +146,45 @@ class HelpScreen(ModalScreen[None]):
             yield Static(HELP_TEXT)
 
 
+class ModelPromptScreen(ModalScreen[str | None]):
+    DEFAULT_CSS = """
+    ModelPromptScreen {
+        align: center middle;
+    }
+    ModelPromptScreen > Vertical {
+        width: 72;
+        background: $surface;
+        border: solid white;
+        padding: 1 2;
+    }
+    #model-input {
+        margin-top: 1;
+    }
+    """
+
+    BINDINGS = [
+        Binding("escape", "dismiss", "Cancel"),
+    ]
+
+    def __init__(self, initial_value: str = "") -> None:
+        super().__init__()
+        self._initial_value = initial_value
+
+    def compose(self) -> ComposeResult:
+        with Vertical():
+            yield Static("[bold]Select model[/]")
+            yield Static("[dim]Example: gpt-5.4-mini or claude-haiku-4-5-20251001[/]")
+            yield Input(value=self._initial_value, placeholder="gpt-5.4-mini", id="model-input")
+
+    def on_mount(self) -> None:
+        self.query_one("#model-input", Input).focus()
+
+    @on(Input.Submitted, "#model-input")
+    def on_submit(self, event: Input.Submitted) -> None:
+        value = event.value.strip()
+        self.dismiss(value or None)
+
+
 class FilterBar(Static):
     active_filter: reactive[str] = reactive("all")
     job_count: reactive[int] = reactive(0)
@@ -358,6 +397,7 @@ class DashboardApp(App):
         self._search_active = False
         self._header_sort_key = sort_by
         self._header_sort_reverse = sort_by == "date"
+        self._model_override = os.environ.get("MODEL_OVERRIDE", "").strip()
         self.theme = "catppuccin-macchiato"
 
     def compose(self) -> ComposeResult:
@@ -588,12 +628,37 @@ class DashboardApp(App):
             self._set_status_msg("No row selected")
             return
 
+        if not self._model_override:
+            self.push_screen(
+                ModelPromptScreen(),
+                callback=lambda selected: self._after_model_prompt(selected, script_name, label),
+            )
+            return
+
+        self._run_optional_artifact_with_model(script_name, label)
+
+    def _after_model_prompt(self, selected: str | None, script_name: str, label: str) -> None:
+        if not selected:
+            self._set_status_msg("Model selection cancelled")
+            return
+        self._model_override = selected.strip()
+        os.environ["MODEL_OVERRIDE"] = self._model_override
+        self._set_status_msg(f"Model set to {self._model_override}")
+        self._run_optional_artifact_with_model(script_name, label)
+
+    def _run_optional_artifact_with_model(self, script_name: str, label: str) -> None:
+        record = self._current_record()
+        if record is None:
+            self._set_status_msg("No row selected")
+            return
+
         self._set_status_msg(f"Running {label} for {record.company}")
         proc = subprocess.run(
             [sys.executable, str(REPO_ROOT / "scripts" / script_name), record.url],
             cwd=REPO_ROOT,
             capture_output=True,
             text=True,
+            env={**os.environ, "MODEL_OVERRIDE": self._model_override},
         )
 
         if proc.returncode != 0:

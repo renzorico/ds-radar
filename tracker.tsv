@@ -269,7 +269,7 @@ date	company	role	url	grade	score	status	pdf_path	notes
 2026-04-07	Prophix	Data Integration Engineer	https://www.linkedin.com/jobs/view/4388910228/	D	2.4	skipped		
 2026-04-07	Linkedin	Senior Data Scientist & Machine Learning Researcher	https://www.linkedin.com/jobs/view/4373824300/	F	0.0	skipped		
 2026-04-07	Linkedin	Technical Product Manager - AI Platforms - GenAI Developer Platform	https://www.linkedin.com/jobs/view/4392276568/	F	0.0	skipped		
-2026-04-07	Xelix	AI Engineer	https://www.linkedin.com/jobs/view/4389907425/	B	4.4	cv_ready	applications/cv_xelix_20260408.pdf	
+2026-04-07	Xelix	AI Engineer	https://www.linkedin.com/jobs/view/4389907425/	B	4.4	evaluated	applications/cv_xelix_20260408.pdf	
 2026-04-07	Logitech	Digital Marketing Data Scientist (COE)	https://www.linkedin.com/jobs/view/4394667801/	D	2.8	skipped		
 2026-04-07	McKinsey & Company (QuantumBlack, AI)	Data Engineer II - QuantumBlack, AI by McKinsey	https://www.linkedin.com/jobs/view/4331193149/	C	3.5	skipped		
 2026-04-07	LexisNexis	AI Engineer	https://www.linkedin.com/jobs/view/4390747263/	C	3.5	skipped		
@@ -572,7 +572,7 @@ date	company	role	url	grade	score	status	pdf_path	notes
 2026-04-09	Linkedin	Operations Analytics Manager, Uber Eats - UK	https://www.linkedin.com/jobs/view/4342983991/	F	0.0	skipped		
 2026-04-09	Condé Nast	Consumer Analyst	https://www.linkedin.com/jobs/view/4329060044/	D	2.7	skipped		
 2026-04-09	Bending Spoons	Data scientist	https://www.linkedin.com/jobs/view/4395454867/	B	4.3	rejected	applications/cv_bending-spoons_20260409.pdf	
-2026-04-09	Vitality	Data Scientist	https://www.linkedin.com/jobs/view/4385262409/	B	4.1	cv_ready	applications/cv_vitality_20260409.pdf	
+2026-04-09	Vitality	Data Scientist	https://www.linkedin.com/jobs/view/4385262409/	B	4.1	evaluated	applications/cv_vitality_20260409.pdf	
 2026-04-09	Linkedin	Senior Game Analyst	https://www.linkedin.com/jobs/view/4389486434/	F	0.0	skipped		
 2026-04-09	Linkedin	Principal Data Analyst	https://www.linkedin.com/jobs/view/4390995416/	F	0.0	skipped		
 2026-04-09	Accurx	People Data & Reward Analyst	https://www.linkedin.com/jobs/view/4378377277/	D	2.9	skipped		
@@ -1471,7 +1471,7 @@ date	company	role	url	grade	score	status	pdf_path	notes
 2026-04-13	Hydrosave (UK) Ltd	Data Analyst	https://www.linkedin.com/jobs/view/4395987979/	D	2.5	skipped		
 2026-04-13	Third Space	Data Analyst	https://www.linkedin.com/jobs/view/4398851191/	D	2.8	skipped		
 2026-04-13	Crossing Hurdles	Statistical Analyst / Mathematician – Expert Network	https://www.linkedin.com/jobs/view/4387713966/	F	1.8	skipped		
-2026-04-13	Wave Group	Data Scientist	https://www.linkedin.com/jobs/view/4398295041/	B	4.4	applied	applications/cv_wave-group_20260413.pdf	
+2026-04-13	Wave Group	Data Scientist	https://www.linkedin.com/jobs/view/4398295041/	B	4.4	skipped	applications/cv_wave-group_20260413.pdf	
 2026-04-13	ivee (Scout recruiting on behalf of partner)	Data Analyst	https://www.linkedin.com/jobs/view/4399009683/	C	3.1	skipped		
 2026-04-13	Cint	Data Scientist	https://www.linkedin.com/jobs/view/4400538550/	C	3.5	skipped		
 2026-04-13	Seismic	Analyst (Consulting)	https://www.linkedin.com/jobs/view/4394397983/	D	2.5	skipped		
@@ -1526,7 +1526,7 @@ date	company	role	url	grade	score	status	pdf_path	notes
 2026-04-13	King (LinkedIn Games)	CRM Data Scientist	https://www.linkedin.com/jobs/view/4399419619/	C	3.6	skipped		
 2026-04-13	Stott and May	Data Scientist	https://www.linkedin.com/jobs/view/4397275764/	C	3.1	skipped		
 2026-04-13	Legal & General	Data Scientist	https://www.linkedin.com/jobs/view/4400389487/	C	3.6	skipped		
-2026-04-13	Synthesia	Commercial Data Scientist	https://www.linkedin.com/jobs/view/4400248934/	A	4.6	cv_ready		
+2026-04-13	Synthesia	Commercial Data Scientist	https://www.linkedin.com/jobs/view/4400248934/	A	4.6	evaluated		
 2026-04-13	Unnamed fund manager (via Ramsey Portia recruitment)	Funds Data Analyst - SQL, Python & Snowflake required	https://www.linkedin.com/jobs/view/4399471222/	C	3.2	skipped		
 2026-04-13	Flannery Plant Hire	Data Analyst	https://www.linkedin.com/jobs/view/4344766876/	D	2.7	skipped		
 2026-04-13	Legal & General	Data Scientist	https://www.linkedin.com/jobs/view/4398527857/	D	2.9	skipped		
@@ -1536,7 +1536,7 @@ date	company	role	url	grade	score	status	pdf_path	notes
 2026-04-13	Oxford Nanopore Technologies	Tech Ops Data Analyst (Programmer)	https://www.linkedin.com/jobs/view/4385934525/	C	3.2	skipped		
 2026-04-13	Haystack (retail/supply chain innovator)	Data Analyst	https://www.linkedin.com/jobs/view/4401019383/	D	2.5	skipped		
 2026-04-13	Post Office Ltd	Data Scientist	https://www.linkedin.com/jobs/view/4398830518/	C	3.5	skipped		
-2026-04-13	Bending Spoons	Data Scientist	https://www.linkedin.com/jobs/view/4399101331/	B	4.2	cv_ready	applications/cv_bending-spoons_20260413.pdf	
+2026-04-13	Bending Spoons	Data Scientist	https://www.linkedin.com/jobs/view/4399101331/	B	4.2	evaluated	applications/cv_bending-spoons_20260413.pdf	
 2026-04-13	Q1 Technologies, Inc.	Data Scientist	https://www.linkedin.com/jobs/view/4398815821/	C	3.2	skipped		
 2026-04-13	Linkedin	Forward Deployed Data Scientist at Nory	https://www.linkedin.com/jobs/view/4400619933/	F	0.0	skipped		
 2026-04-13	VolkerWessels UK	Data Analyst	https://www.linkedin.com/jobs/view/4398621405/	D	2.5	skipped		
@@ -1566,7 +1566,7 @@ date	company	role	url	grade	score	status	pdf_path	notes
 2026-04-13	Fortray Global Service Limited	Data Analyst	https://www.linkedin.com/jobs/view/4398153422/	D	2.8	skipped		
 2026-04-13	Linkedin	Data Scientist	https://www.linkedin.com/jobs/view/4398511529/	F	0.0	skipped		
 2026-04-13	Insurtech (via Arthur Recruitment)	Data Scientist (Pricing)	https://www.linkedin.com/jobs/view/4399232670/	C	3.6	skipped		
-2026-04-13	Bending Spoons	Data Analyst	https://www.linkedin.com/jobs/view/4399101329/	B	4.0	cv_ready	applications/cv_bending-spoons_20260413.pdf	
+2026-04-13	Bending Spoons	Data Analyst	https://www.linkedin.com/jobs/view/4399101329/	B	4.0	evaluated	applications/cv_bending-spoons_20260413.pdf	
 2026-04-13	Wave	Data Analyst	https://www.linkedin.com/jobs/view/4398145016/	D	2.3	skipped		
 2026-04-13	Haystack	Senior Systems and Data Analyst	https://www.linkedin.com/jobs/view/4401021334/	F	1.9	skipped		
 2026-04-13	Ofgem	Analyst	https://www.linkedin.com/jobs/view/4398133387/	D	2.8	skipped		
@@ -1599,7 +1599,7 @@ date	company	role	url	grade	score	status	pdf_path	notes
 2026-04-13	Linkedin	Senior Data Analyst	https://www.linkedin.com/jobs/view/4378026385/	F	0.0	skipped		
 2026-04-13	Mill Hill Education Group	Data Operations Analyst	https://www.linkedin.com/jobs/view/4399261432/	D	2.7	skipped		
 2026-04-13	Kpler	Power Market Analyst	https://www.linkedin.com/jobs/view/4345926153/	D	2.8	skipped		
-2026-04-13	Bending Spoons	Data Scientist	https://www.linkedin.com/jobs/view/4399109191/	B	4.1	cv_ready	applications/cv_bending-spoons_20260413.pdf	
+2026-04-13	Bending Spoons	Data Scientist	https://www.linkedin.com/jobs/view/4399109191/	B	4.1	evaluated	applications/cv_bending-spoons_20260413.pdf	
 2026-04-13	OnBuy	Operations Data Analyst	https://www.linkedin.com/jobs/view/4400530618/	D	2.6	skipped		
 2026-04-13	Global Media & Entertainment Brand (via Handle Recruitment)	Content Planning Analyst	https://www.linkedin.com/jobs/view/4397298076/	D	2.1	skipped		
 2026-04-13	Easyfairs	Data Executive	https://www.linkedin.com/jobs/view/4397274749/	D	2.7	skipped		
@@ -1703,7 +1703,7 @@ date	company	role	url	grade	score	status	pdf_path	notes
 2026-04-13	Linkedin	Senior Data Analyst	https://www.linkedin.com/jobs/view/4375917211/	F	0.0	skipped		
 2026-04-13	Microsoft	Sales Data Analyst Apprentice	https://www.linkedin.com/jobs/view/4380313795/	D	2.9	skipped		
 2026-04-13	Mondelēz International	Analyst IC (Immediate Consumption)	https://www.linkedin.com/jobs/view/4388579102/	D	2.7	skipped		
-2026-04-13	Bending Spoons	Data scientist	https://www.linkedin.com/jobs/view/4399114177/	B	4.2	cv_ready	applications/cv_bending-spoons_20260413.pdf	
+2026-04-13	Bending Spoons	Data scientist	https://www.linkedin.com/jobs/view/4399114177/	B	4.2	evaluated	applications/cv_bending-spoons_20260413.pdf	
 2026-04-13	Amazon	AI Data Associate French, Artificial General Intelligence	https://www.linkedin.com/jobs/view/4399240868/	D	2.2	skipped		
 2026-04-13	Deel	Data Scientist	https://www.linkedin.com/jobs/view/4397266483/	B	4.3	applied	applications/cv_deel_20260413.pdf	
 2026-04-13	GCHQ	Data Scientist	https://www.linkedin.com/jobs/view/4395968091/	D	2.9	skipped		
@@ -1754,7 +1754,7 @@ date	company	role	url	grade	score	status	pdf_path	notes
 2026-04-13	Crowe UK	CRM and Data Executive	https://www.linkedin.com/jobs/view/4395973488/	D	2.2	skipped		
 2026-04-13	Linkedin	Senior Data Scientist	https://www.linkedin.com/jobs/view/4367714283/	F	0.0	skipped		
 2026-04-13	Marks and Spencer	Data Analyst - Distribution	https://www.linkedin.com/jobs/view/4401081776/	D	2.5	skipped		
-2026-04-13	Bending Spoons	Data scientist	https://www.linkedin.com/jobs/view/4399109190/	B	4.3	cv_ready	applications/cv_bending-spoons_20260413.pdf	
+2026-04-13	Bending Spoons	Data scientist	https://www.linkedin.com/jobs/view/4399109190/	B	4.3	evaluated	applications/cv_bending-spoons_20260413.pdf	
 2026-04-13	Unnamed Insurtech (via Arthur Recruitment)	Pricing Data Scientist (Remote)	https://www.linkedin.com/jobs/view/4399238404/	D	2.8	skipped		
 2026-04-13	Spectrum IT Recruitment (Client Unknown)	Quantitative Analyst	https://www.linkedin.com/jobs/view/4394790289/	D	2.8	skipped		
 2026-04-13	Mercor	Data Reviewer - Fully Remote	https://www.linkedin.com/jobs/view/4400965503/	D	2.5	skipped		
@@ -2023,7 +2023,7 @@ date	company	role	url	grade	score	status	pdf_path	notes
 2026-04-13	Global Asset Management Firm (via Marks Sattin)	AI Engineer	https://www.linkedin.com/jobs/view/4398804248/	B	4.0	applied	applications/cv_global-asset-management-firm-via-marks-sattin_20260413.pdf	
 2026-04-13	Linkedin	Python Developer – AI & LLMs (Data)	https://www.linkedin.com/jobs/view/4399005857/	F	0.0	skipped		
 2026-04-13	LexisNexis Legal	AI Engineer	https://www.linkedin.com/jobs/view/4398844142/	C	3.5	skipped		
-2026-04-13	Hyperexponential	Research Engineer - AI Team	https://www.linkedin.com/jobs/view/4396381261/	B	4.3	cv_ready	applications/cv_hyperexponential_20260413.pdf	
+2026-04-13	Hyperexponential	Research Engineer - AI Team	https://www.linkedin.com/jobs/view/4396381261/	B	4.3	evaluated	applications/cv_hyperexponential_20260413.pdf	
 2026-04-13	Zeus® | AI-Powered Logistics	Artificial Intelligence Engineer	https://www.linkedin.com/jobs/view/4399286415/	C	3.5	skipped		
 2026-04-13	TechTree (client: AI-driven security platform)	Data Engineer (+ Equity)	https://www.linkedin.com/jobs/view/4399251192/	C	3.5	skipped		
 2026-04-13	Linkedin	Lead Practitioner in Science	https://www.linkedin.com/jobs/view/4399874487/	F	0.0	skipped		
@@ -2036,7 +2036,7 @@ date	company	role	url	grade	score	status	pdf_path	notes
 2026-04-13	Linkedin	AI Engineer	https://www.linkedin.com/jobs/view/4399609712/	F	0.0	skipped		
 2026-04-13	Mitie	Machine Learning Engineer	https://www.linkedin.com/jobs/view/4395984347/	C	3.6	skipped		
 2026-04-13	Calyptus	AI/ML Engineer	https://www.linkedin.com/jobs/view/4400227045/	C	3.9	skipped		
-2026-04-13	Electric Twin	AI Engineer at Electric Twin	https://www.linkedin.com/jobs/view/4398903747/	B	4.3	cv_ready	applications/cv_electric-twin_20260413.pdf	
+2026-04-13	Electric Twin	AI Engineer at Electric Twin	https://www.linkedin.com/jobs/view/4398903747/	B	4.3	evaluated	applications/cv_electric-twin_20260413.pdf	
 2026-04-13	Datatech Analytics / Global Logistics Leader	Junior Simulation Specialist	https://www.linkedin.com/jobs/view/4394772603/	D	2.0	skipped		
 2026-04-13	Tata Consultancy Services	AI Engineer	https://www.linkedin.com/jobs/view/4389582536/	D	2.4	skipped		
 2026-04-13	Linkedin	Research ML Engineer	https://www.linkedin.com/jobs/view/4399222870/	F	0.0	skipped		
@@ -2044,33 +2044,33 @@ date	company	role	url	grade	score	status	pdf_path	notes
 2026-04-13	Ventula Consulting	AI / ML Engineer	https://www.linkedin.com/jobs/view/4400238324/	C	3.1	skipped		
 2026-04-13	Great Value Hiring	Machine Learning Engineer	https://www.linkedin.com/jobs/view/4377382082/	D	2.3	skipped		
 2026-04-13	Linkedin	ML Engineer	https://www.linkedin.com/jobs/view/4398136161/	F	0.0	skipped		
-2026-04-13	Via (undisclosed AI company)	AI Engineer	https://www.linkedin.com/jobs/view/4400398925/	B	4.3	cv_ready	applications/cv_via-undisclosed-ai-company_20260413.pdf	
+2026-04-13	Via (undisclosed AI company)	AI Engineer	https://www.linkedin.com/jobs/view/4400398925/	B	4.3	evaluated	applications/cv_via-undisclosed-ai-company_20260413.pdf	
 2026-04-13	The Francis Crick Institute	AI Data Engineer	https://www.linkedin.com/jobs/view/4398272634/	D	2.9	skipped		
-2026-04-13	Oliver Bernard (B2B AI Company)	AI Engineer	https://www.linkedin.com/jobs/view/4398269788/	B	4.3	cv_ready	applications/cv_oliver-bernard-b2b-ai-company_20260413.pdf	
+2026-04-13	Oliver Bernard (B2B AI Company)	AI Engineer	https://www.linkedin.com/jobs/view/4398269788/	B	4.3	evaluated	applications/cv_oliver-bernard-b2b-ai-company_20260413.pdf	
 2026-04-13	Steven Bartlett Private Office	AI Innovator	https://www.linkedin.com/jobs/view/4398626290/	D	2.7	skipped		
 2026-04-13	Calyptus	AI/ML Engineer	https://www.linkedin.com/jobs/view/4400222305/	C	3.9	skipped		
 2026-04-13	CV Technical LTD	AI Engineer	https://www.linkedin.com/jobs/view/4398381099/	D	2.0	skipped		
 2026-04-13	Linkedin	Python Developer - AI & LLMs	https://www.linkedin.com/jobs/view/4398619086/	F	0.0	skipped		
 2026-04-13	Linkedin	Lead Practitioner in Maths	https://www.linkedin.com/jobs/view/4399869624/	F	0.0	skipped		
-2026-04-13	StackAdapt	Applied Machine Learning Scientist	https://www.linkedin.com/jobs/view/4400601953/	A	4.5	cv_ready	applications/cv_stackadapt_20260413.pdf	
+2026-04-13	StackAdapt	Applied Machine Learning Scientist	https://www.linkedin.com/jobs/view/4400601953/	A	4.5	evaluated	applications/cv_stackadapt_20260413.pdf	
 2026-04-13	Linkedin	Founding AI Research Engineer	https://www.linkedin.com/jobs/view/4399622783/	F	0.0	skipped		
 2026-04-13	Certain Advantage	AI Engineer	https://www.linkedin.com/jobs/view/4399044757/	C	3.7	skipped		
 2026-04-13	Linkedin	AI Engineer	https://www.linkedin.com/jobs/view/4398779229/	F	0.0	skipped		
 2026-04-13	Linkedin	AI Engineer - Payments	https://www.linkedin.com/jobs/view/4400222698/	F	0.0	skipped		
-2026-04-13	Tracelight	AI Engineer at Tracelight	https://www.linkedin.com/jobs/view/4399235936/	B	4.2	cv_ready	applications/cv_tracelight_20260413.pdf	
+2026-04-13	Tracelight	AI Engineer at Tracelight	https://www.linkedin.com/jobs/view/4399235936/	B	4.2	evaluated	applications/cv_tracelight_20260413.pdf	
 2026-04-13	Tracer	Junior Engineer	https://www.linkedin.com/jobs/view/4398133822/	C	3.4	skipped		
 2026-04-13	ConnexAI	Machine Learning Engineer - Inference	https://www.linkedin.com/jobs/view/4394796157/	C	3.6	skipped		
 2026-04-13	Shanghai Yanfu Investments Co., Ltd.	Machine Learning Engineer (AI infra)	https://www.linkedin.com/jobs/view/4399220492/	D	2.2	skipped		
 2026-04-13	CipherTek Recruitment (Global Investment Bank)	Artificial Intelligence Consultant	https://www.linkedin.com/jobs/view/4388344810/	D	2.8	skipped		
 2026-04-13	Crossing Hurdles / Mercor	Machine Learning Specialist | Remote	https://www.linkedin.com/jobs/view/4387324832/	D	2.5	skipped		
 2026-04-13	Linkedin	Applied AI Engineer	https://www.linkedin.com/jobs/view/4399848764/	F	0.0	skipped		
-2026-04-13	Plentific	AI Engineer	https://www.linkedin.com/jobs/view/4379856117/	B	4.2	cv_ready	applications/cv_plentific_20260413.pdf	
-2026-04-13	Generative	AI Founding Engineer	https://www.linkedin.com/jobs/view/4399543190/	A	4.5	cv_ready	applications/cv_generative_20260413.pdf	
+2026-04-13	Plentific	AI Engineer	https://www.linkedin.com/jobs/view/4379856117/	B	4.2	evaluated	applications/cv_plentific_20260413.pdf	
+2026-04-13	Generative	AI Founding Engineer	https://www.linkedin.com/jobs/view/4399543190/	A	4.5	evaluated	applications/cv_generative_20260413.pdf	
 2026-04-13	Veeva Systems	Python Engineer (Remote)	https://www.linkedin.com/jobs/view/4377604500/	C	3.2	skipped		
 2026-04-13	Linkedin	Senior AI Consultant	https://www.linkedin.com/jobs/view/4399616830/	F	0.0	skipped		
 2026-04-13	Lumora Solutions	Artificial Intelligence Consultant	https://www.linkedin.com/jobs/view/4399856828/	D	2.6	skipped		
 2026-04-13	Saragossa	AI Engineer - Build LLM's - Up to £135k	https://www.linkedin.com/jobs/view/4398458368/	C	3.0	skipped		
-2026-04-13	Oho Group	Artificial Intelligence Engineer	https://www.linkedin.com/jobs/view/4393498522/	B	4.1	cv_ready	applications/cv_oho-group_20260413.pdf	
+2026-04-13	Oho Group	Artificial Intelligence Engineer	https://www.linkedin.com/jobs/view/4393498522/	B	4.1	evaluated	applications/cv_oho-group_20260413.pdf	
 2026-04-13	Freedx	Python Trading Research Analyst	https://www.linkedin.com/jobs/view/4399524045/	D	2.6	skipped		
 2026-04-13	FOIL	AI Engineer	https://www.linkedin.com/jobs/view/4398149082/	C	3.2	skipped		
 2026-04-13	DeepRec.ai (stealth-stage MedTech client)	Machine Learning Researcher	https://www.linkedin.com/jobs/view/4398510580/	C	3.0	skipped		
@@ -2083,7 +2083,7 @@ date	company	role	url	grade	score	status	pdf_path	notes
 2026-04-13	LinkedIn (via trg.recruitment)	AI Engineer	https://www.linkedin.com/jobs/view/4355431025/	C	3.6	skipped		
 2026-04-13	Anthropic	Data Engineer, Safeguards	https://www.linkedin.com/jobs/view/4387130161/	C	3.8	skipped		
 2026-04-13	Fundment	AI Scientist	https://www.linkedin.com/jobs/view/4399627722/	D	2.9	skipped		
-2026-04-13	Solve Intelligence	AI Engineer ($100K-$400K + Equity)	https://www.linkedin.com/jobs/view/4400933833/	A	4.5	cv_ready	applications/cv_solve-intelligence_20260413.pdf	
+2026-04-13	Solve Intelligence	AI Engineer ($100K-$400K + Equity)	https://www.linkedin.com/jobs/view/4400933833/	A	4.5	evaluated	applications/cv_solve-intelligence_20260413.pdf	
 2026-04-13	King	Analytics Engineer	https://www.linkedin.com/jobs/view/4399429340/	C	3.6	skipped		
 2026-04-13	Linkedin	Machine Learning Engineer	https://www.linkedin.com/jobs/view/4373493485/	F	0.0	skipped		
 2026-04-13	JPMorgan Chase	Data Scientist – Fraud Strategic Analytics Associate	https://www.linkedin.com/jobs/view/4369754441/	C	3.6	skipped		
@@ -2094,7 +2094,7 @@ date	company	role	url	grade	score	status	pdf_path	notes
 2026-04-13	Quotient Sciences	Machine Learning Engineer	https://www.linkedin.com/jobs/view/4384711210/	D	2.9	skipped		
 2026-04-13	Next Ltd (via hackajob)	AI Engineer	https://www.linkedin.com/jobs/view/4398750235/	C	3.4	skipped		
 2026-04-13	Experis	AI Engineer (M&A & Transaction Analytics)	https://www.linkedin.com/jobs/view/4397695605/	D	2.5	skipped		
-2026-04-13	Onsera Health	AI Engineer	https://www.linkedin.com/jobs/view/4400933540/	A	4.5	cv_ready	applications/cv_onsera-health_20260413.pdf	
+2026-04-13	Onsera Health	AI Engineer	https://www.linkedin.com/jobs/view/4400933540/	A	4.5	evaluated	applications/cv_onsera-health_20260413.pdf	
 2026-04-13	Oliver Bernard (Private Markets Firm)	AI Engineer - Contract - London	https://www.linkedin.com/jobs/view/4398829256/	C	3.8	skipped		
 2026-04-13	Crossing Hurdles	Applied AI Engineer	https://www.linkedin.com/jobs/view/4384994846/	C	3.1	skipped		
 2026-04-13	FDM Group (for Capgemini/Systems Integrator client)	Data Engineer	https://www.linkedin.com/jobs/view/4398493030/	D	2.9	skipped		
@@ -2105,7 +2105,7 @@ date	company	role	url	grade	score	status	pdf_path	notes
 2026-04-13	Allica Bank	AI Automation Analyst	https://www.linkedin.com/jobs/view/4398163500/	D	2.8	skipped		
 2026-04-13	easyJet holidays	Data Engineer	https://www.linkedin.com/jobs/view/4386701950/	C	3.2	skipped		
 2026-04-13	Man Group	Python Engineer - AI	https://www.linkedin.com/jobs/view/4401097173/	C	3.7	skipped		
-2026-04-13	Intent HQ	Artificial Intelligence Engineer	https://www.linkedin.com/jobs/view/4401065679/	A	4.7	cv_ready	applications/cv_intent-hq_20260413.pdf	
+2026-04-13	Intent HQ	Artificial Intelligence Engineer	https://www.linkedin.com/jobs/view/4401065679/	A	4.7	evaluated	applications/cv_intent-hq_20260413.pdf	
 2026-04-13	Key Talent Solutions (via LinkedIn job board)	Artificial Intelligence Engineer	https://www.linkedin.com/jobs/view/4398532611/	C	3.4	skipped		
 2026-04-13	Wise	Data Engineer	https://www.linkedin.com/jobs/view/4398148330/	C	3.9	skipped		
 2026-04-13	Haystack (rail intelligence consultancy)	Data Engineer	https://www.linkedin.com/jobs/view/4401014735/	C	3.5	skipped		
@@ -2116,13 +2116,13 @@ date	company	role	url	grade	score	status	pdf_path	notes
 2026-04-13	Rivan Industries	Computational Scientist	https://www.linkedin.com/jobs/view/4383699363/	C	3.1	skipped		
 2026-04-13	Faculty	Machine Learning Engineer	https://www.linkedin.com/jobs/view/4374291067/	C	3.3	skipped		
 2026-04-13	TechTree (recruiting for stealth healthcare AI startup)	Software Engineer (Python) (+ Equity) at stealth healthcare AI startup	https://www.linkedin.com/jobs/view/4399248230/	C	3.0	skipped		
-2026-04-13	Compare the Market	Machine Learning Engineer	https://www.linkedin.com/jobs/view/4378638845/	B	4.2	cv_ready	applications/cv_compare-the-market_20260413.pdf	
-2026-04-13	Annapurna	Artificial Intelligence Engineer	https://www.linkedin.com/jobs/view/4398834552/	B	4.1	cv_ready	applications/cv_annapurna_20260413.pdf	
+2026-04-13	Compare the Market	Machine Learning Engineer	https://www.linkedin.com/jobs/view/4378638845/	B	4.2	evaluated	applications/cv_compare-the-market_20260413.pdf	
+2026-04-13	Annapurna	Artificial Intelligence Engineer	https://www.linkedin.com/jobs/view/4398834552/	B	4.1	evaluated	applications/cv_annapurna_20260413.pdf	
 2026-04-13	Alignerr	Machine Learning Engineer (AI Data Trainer)	https://www.linkedin.com/jobs/view/4399848422/	D	2.6	skipped		
 2026-04-13	Calyptus	AI/ML Engineer	https://www.linkedin.com/jobs/view/4400216474/	C	3.7	skipped		
 2026-04-13	Deloitte	AI Engineer	https://www.linkedin.com/jobs/view/4395416871/	C	3.0	skipped		
 2026-04-13	10a Labs (client placement)	Protection Scientist Engineer	https://www.linkedin.com/jobs/view/4399069314/	D	2.9	skipped		
-2026-04-13	StackAdapt	Machine Learning Engineer (Remote)	https://www.linkedin.com/jobs/view/4400621286/	B	4.2	cv_ready	applications/cv_stackadapt_20260413.pdf	
+2026-04-13	StackAdapt	Machine Learning Engineer (Remote)	https://www.linkedin.com/jobs/view/4400621286/	B	4.2	evaluated	applications/cv_stackadapt_20260413.pdf	
 2026-04-13	Revolut	Software Engineer (Python) - AI Platform	https://www.linkedin.com/jobs/view/4250197984/	C	3.9	skipped		
 2026-04-13	Linkedin	Senior Data Scientist	https://www.linkedin.com/jobs/view/4401025230/	F	0.0	skipped		
 2026-04-13	Bending Spoons	Graduate AI software engineer	https://www.linkedin.com/jobs/view/4397632651/	C	3.3	skipped		
@@ -2144,7 +2144,7 @@ date	company	role	url	grade	score	status	pdf_path	notes
 2026-04-13	83zero	AI Transformation Consultant	https://www.linkedin.com/jobs/view/4399527077/	D	2.8	skipped		
 2026-04-13	HubBox	Junior Integration Engineer	https://www.linkedin.com/jobs/view/4398550131/	D	2.3	skipped		
 2026-04-13	Epoch Biodesign	Machine Learning Engineer	https://www.linkedin.com/jobs/view/4398869294/	C	3.8	skipped		
-2026-04-13	LinkedIn (via Harnham)	Analytics Engineer	https://www.linkedin.com/jobs/view/4398553364/	B	4.3	cv_ready	applications/cv_linkedin-via-harnham_20260413.pdf	
+2026-04-13	LinkedIn (via Harnham)	Analytics Engineer	https://www.linkedin.com/jobs/view/4398553364/	B	4.3	evaluated	applications/cv_linkedin-via-harnham_20260413.pdf	
 2026-04-13	Linkedin	Applied AI Lead	https://www.linkedin.com/jobs/view/4328738821/	F	0.0	skipped		
 2026-04-13	Monzo Bank	Platform Engineer, Machine Learning	https://www.linkedin.com/jobs/view/4386847104/	C	3.4	skipped		
 2026-04-13	Linkedin	Quantitative Developer	https://www.linkedin.com/jobs/view/4399046433/	F	0.0	skipped		
@@ -2152,14 +2152,14 @@ date	company	role	url	grade	score	status	pdf_path	notes
 2026-04-13	Bending Spoons	Graduate AI software engineer	https://www.linkedin.com/jobs/view/4397647274/	C	3.4	skipped		
 2026-04-13	Linkedin	AI Platform Engineer	https://www.linkedin.com/jobs/view/4398614243/	F	0.0	skipped		
 2026-04-13	MediaTek	Research Engineer	https://www.linkedin.com/jobs/view/4368938689/	C	3.1	skipped		
-2026-04-13	Signify Technology	Machine Learning Engineer (Contract)	https://www.linkedin.com/jobs/view/4399001975/	B	4.2	cv_ready	applications/cv_signify-technology_20260413.pdf	
+2026-04-13	Signify Technology	Machine Learning Engineer (Contract)	https://www.linkedin.com/jobs/view/4399001975/	B	4.2	evaluated	applications/cv_signify-technology_20260413.pdf	
 2026-04-13	XpertDirect	LLM Engineer	https://www.linkedin.com/jobs/view/4398497089/	C	3.2	skipped		
 2026-04-13	LinkedIn (via Burns Sheehan)	Data Engineer	https://www.linkedin.com/jobs/view/4383706948/	C	3.7	skipped		
-2026-04-13	Oho Group	Artificial Intelligence Engineer	https://www.linkedin.com/jobs/view/4398194310/	B	4.1	cv_ready	applications/cv_oho-group_20260413.pdf	
-2026-04-13	Entrust	Applied Scientist I	https://www.linkedin.com/jobs/view/4329016600/	B	4.1	cv_ready	applications/cv_entrust_20260413.pdf	
+2026-04-13	Oho Group	Artificial Intelligence Engineer	https://www.linkedin.com/jobs/view/4398194310/	B	4.1	evaluated	applications/cv_oho-group_20260413.pdf	
+2026-04-13	Entrust	Applied Scientist I	https://www.linkedin.com/jobs/view/4329016600/	B	4.1	evaluated	applications/cv_entrust_20260413.pdf	
 2026-04-13	LinkedIn (via Client Server)	Python Developer FastAPI SQL Data	https://www.linkedin.com/jobs/view/4399866021/	C	3.6	skipped		
 2026-04-13	Modo Energy	Python Engineer - AI & LLMs	https://www.linkedin.com/jobs/view/4399285810/	C	3.5	skipped		
-2026-04-13	IAG Loyalty	Analytics Engineer	https://www.linkedin.com/jobs/view/4388398311/	B	4.1	cv_ready	applications/cv_iag-loyalty_20260413.pdf	
+2026-04-13	IAG Loyalty	Analytics Engineer	https://www.linkedin.com/jobs/view/4388398311/	B	4.1	evaluated	applications/cv_iag-loyalty_20260413.pdf	
 2026-04-13	Google DeepMind	Research Scientist, Generative Modelling for Materials and Chemistry	https://www.linkedin.com/jobs/view/4399252103/	D	2.9	skipped		
 2026-04-13	numi	Python Developer	https://www.linkedin.com/jobs/view/4320569358/	D	2.7	skipped		
 2026-04-13	Lunio	Data Engineer	https://www.linkedin.com/jobs/view/4396378895/	C	3.8	skipped		
@@ -2168,7 +2168,7 @@ date	company	role	url	grade	score	status	pdf_path	notes
 2026-04-13	FDM Group	Quantitative Developer	https://www.linkedin.com/jobs/view/4398816904/	D	2.7	skipped		
 2026-04-13	HM Revenue & Customs	Junior Software Engineer (Technical Exploitation)	https://www.linkedin.com/jobs/view/4398846529/	F	1.7	skipped		
 2026-04-13	Searchability NS&D (National Security Organisation)	Data Engineer	https://www.linkedin.com/jobs/view/4400388601/	F	1.7	skipped		
-2026-04-13	LinkedIn	Analytics Engineer	https://www.linkedin.com/jobs/view/4396358357/	B	4.4	cv_ready	applications/cv_linkedin_20260413.pdf	
+2026-04-13	LinkedIn	Analytics Engineer	https://www.linkedin.com/jobs/view/4396358357/	B	4.4	evaluated	applications/cv_linkedin_20260413.pdf	
 2026-04-13	BAE Systems Digital Intelligence	AI/ML Researcher	https://www.linkedin.com/jobs/view/4395970572/	D	2.9	skipped		
 2026-04-13	3Search (Property Business Client)	Systems Analyst	https://www.linkedin.com/jobs/view/4398403269/	D	2.5	skipped		
 2026-04-13	Financial Services Firm (via Roc Search)	Python Developer	https://www.linkedin.com/jobs/view/4400289034/	D	2.7	skipped		
@@ -2209,7 +2209,7 @@ date	company	role	url	grade	score	status	pdf_path	notes
 2026-04-13	Crossing Hurdles	Python Developer | Remote	https://www.linkedin.com/jobs/view/4395407462/	D	2.1	skipped		
 2026-04-13	Octopus Energy	Data Analyst - Capital Markets	https://www.linkedin.com/jobs/view/4378764288/	D	2.6	skipped		
 2026-04-13	Tech Mahindra	AI Graduate Engineers (AI Scientist Graduate Internship)	https://www.linkedin.com/jobs/view/4398118904/	D	2.4	skipped		
-2026-04-13	Deep Tech Company (via Humand Talent)	Machine Learning Research Engineer ID46889	https://www.linkedin.com/jobs/view/4398231016/	B	4.0	cv_ready	applications/cv_deep-tech-company-via-humand-talent_20260413.pdf	
+2026-04-13	Deep Tech Company (via Humand Talent)	Machine Learning Research Engineer ID46889	https://www.linkedin.com/jobs/view/4398231016/	B	4.0	evaluated	applications/cv_deep-tech-company-via-humand-talent_20260413.pdf	
 2026-04-13	WRITER	AI deployment engineer (UK)	https://www.linkedin.com/jobs/view/4394720421/	C	3.2	skipped		
 2026-04-13	Checkout.com	Golang Software Engineer	https://www.linkedin.com/jobs/view/4318291110/	D	2.4	skipped		
 2026-04-13	LinkedIn (via Harnham)	Analytics Engineer	https://www.linkedin.com/jobs/view/4399414381/	C	3.9	skipped		
@@ -2230,8 +2230,8 @@ date	company	role	url	grade	score	status	pdf_path	notes
 2026-04-13	Aarki (RZR Global)	Solution Engineer	https://www.linkedin.com/jobs/view/4401070549/	D	2.2	skipped		
 2026-04-13	Twine	AI Engineer – Hybrid	https://www.linkedin.com/jobs/view/4398258053/	D	2.9	skipped		
 2026-04-13	Alignerr	Machine Learning Engineer (AI Data Trainer)	https://www.linkedin.com/jobs/view/4400960760/	D	2.6	skipped		
-2026-04-13	Veeva Systems	DS/ML Engineer	https://www.linkedin.com/jobs/view/4377610258/	B	4.2	cv_ready	applications/cv_veeva-systems_20260413.pdf	
-2026-04-13	Era4	AI/ML Solutions Engineer	https://www.linkedin.com/jobs/view/4384726607/	B	4.0	cv_ready	applications/cv_era4_20260413.pdf	
+2026-04-13	Veeva Systems	DS/ML Engineer	https://www.linkedin.com/jobs/view/4377610258/	B	4.2	evaluated	applications/cv_veeva-systems_20260413.pdf	
+2026-04-13	Era4	AI/ML Solutions Engineer	https://www.linkedin.com/jobs/view/4384726607/	B	4.0	evaluated	applications/cv_era4_20260413.pdf	
 2026-04-13	BRG	AI Lab Applications Engineer	https://www.linkedin.com/jobs/view/4385295683/	C	3.4	skipped		
 2026-04-13	Qualis Flow (Qflow)	Data Engineer	https://www.linkedin.com/jobs/view/4394782426/	C	3.9	skipped		
 2026-04-13	Lloyds Banking Group	Software Engineer (Security Data and AI)	https://www.linkedin.com/jobs/view/4400228336/	D	2.4	skipped		
@@ -2290,14 +2290,14 @@ date	company	role	url	grade	score	status	pdf_path	notes
 2026-04-13	LinkedIn (via Spencer Scott - Technology Recruitment)	Python Developer	https://www.linkedin.com/jobs/view/4399022717/	D	2.7	skipped		
 2026-04-13	SINGULIER	Business Strategy Analyst/Consultant (London)	https://www.linkedin.com/jobs/view/4388128575/	D	2.2	skipped		
 2026-04-13	eTeam (via LinkedIn recruitment)	Data Engineer	https://www.linkedin.com/jobs/view/4398515671/	D	2.0	skipped		
-2026-04-13	Bending Spoons	AI research engineer	https://www.linkedin.com/jobs/view/4398703237/	B	4.0	cv_ready	applications/cv_bending-spoons_20260413.pdf	
+2026-04-13	Bending Spoons	AI research engineer	https://www.linkedin.com/jobs/view/4398703237/	B	4.0	evaluated	applications/cv_bending-spoons_20260413.pdf	
 2026-04-13	Nearform	Forward Deployed Engineer (Perm, UK, Remote + Travel)	https://www.linkedin.com/jobs/view/4369253880/	D	2.6	skipped		
 2026-04-13	Epoch Biodesign	Scientific Data Engineer	https://www.linkedin.com/jobs/view/4398868316/	C	3.6	skipped		
 2026-04-13	Parkwood Leisure	Graduate Data Engineer	https://www.linkedin.com/jobs/view/4399611827/	D	2.3	skipped		
 2026-04-13	Linkedin	Analytics Lead	https://www.linkedin.com/jobs/view/4377299528/	F	0.0	skipped		
 2026-04-13	TEKsystems	AI Business Analyst	https://www.linkedin.com/jobs/view/4399893197/	D	2.1	skipped		
 2026-04-13	Google DeepMind	Research Scientist, World Models, DeepMind	https://www.linkedin.com/jobs/view/4398108829/	D	2.6	skipped		
-2026-04-13	Entrust (Onfido)	Applied Scientist I	https://www.linkedin.com/jobs/view/4398133453/	B	4.1	cv_ready	applications/cv_entrust-onfido_20260413.pdf	
+2026-04-13	Entrust (Onfido)	Applied Scientist I	https://www.linkedin.com/jobs/view/4398133453/	B	4.1	evaluated	applications/cv_entrust-onfido_20260413.pdf	
 2026-04-13	Linkedin	Data Engineer	https://www.linkedin.com/jobs/view/4368289604/	F	0.0	skipped		
 2026-04-13	Projective Group	Data Consultant	https://www.linkedin.com/jobs/view/4399029135/	D	2.7	skipped		
 2026-04-13	TechTree (on behalf of unnamed client)	Developer Advocate (+ Equity)	https://www.linkedin.com/jobs/view/4395999494/	D	2.6	skipped		
@@ -2306,7 +2306,7 @@ date	company	role	url	grade	score	status	pdf_path	notes
 2026-04-13	BAE Systems	Artificial Intelligence Researcher – Image Analysis	https://www.linkedin.com/jobs/view/4398569474/	D	2.5	skipped		
 2026-04-13	Linkedin	Member of Technical Staff, AI Data - MAI Superintelligence Team	https://www.linkedin.com/jobs/view/4377427740/	F	0.0	skipped		
 2026-04-13	Sur Global	AI Revenue Engineer	https://www.linkedin.com/jobs/view/4399415777/	D	2.8	skipped		
-2026-04-13	Durlston Partners (on behalf of global hedge fund)	Generative AI Engineer	https://www.linkedin.com/jobs/view/4398455576/	B	4.2	cv_ready	applications/cv_durlston-partners-on-behalf-of-global-hedge-fund_20260413.pdf	
+2026-04-13	Durlston Partners (on behalf of global hedge fund)	Generative AI Engineer	https://www.linkedin.com/jobs/view/4398455576/	B	4.2	evaluated	applications/cv_durlston-partners-on-behalf-of-global-hedge-fund_20260413.pdf	
 2026-04-13	djr (LinkedIn contract via recruiter)	Senior Python Engineer (Microservices / Event-Driven)	https://www.linkedin.com/jobs/view/4399873310/	D	2.5	skipped		
 2026-04-13	Faculty	Software Engineer	https://www.linkedin.com/jobs/view/4385470179/	D	2.8	skipped		
 2026-04-13	Barnardo's	AI Engineer	https://www.linkedin.com/jobs/view/4399611715/	D	2.6	skipped		
@@ -2356,7 +2356,7 @@ date	company	role	url	grade	score	status	pdf_path	notes
 2026-04-13	Graphcore	Software Engineer - Triton	https://www.linkedin.com/jobs/view/4385962446/	D	2.4	skipped		
 2026-04-13	Klipboard	Software Engineer	https://www.linkedin.com/jobs/view/4388329854/	F	1.9	skipped		
 2026-04-13	The University of Edinburgh	Research Associate	https://www.linkedin.com/jobs/view/4384479671/	F	1.5	skipped		
-2026-04-13	Veridox	AI Application Engineer	https://www.linkedin.com/jobs/view/4400381707/	B	4.2	cv_ready	applications/cv_veridox_20260413.pdf	
+2026-04-13	Veridox	AI Application Engineer	https://www.linkedin.com/jobs/view/4400381707/	B	4.2	evaluated	applications/cv_veridox_20260413.pdf	
 2026-04-13	Linkedin	Data Engineer	https://www.linkedin.com/jobs/view/4399509325/	F	0.0	skipped		
 2026-04-13	Sony Interactive Entertainment	Graduate Engineer	https://www.linkedin.com/jobs/view/4399513729/	D	2.3	skipped		
 2026-04-13	Linkedin	Data engineer/Data scientist	https://www.linkedin.com/jobs/view/4399320989/	F	0.0	skipped		
@@ -2366,7 +2366,7 @@ date	company	role	url	grade	score	status	pdf_path	notes
 2026-04-13	Syngenta	Transcriptomics Bioinformatician	https://www.linkedin.com/jobs/view/4400983595/	D	2.2	skipped		
 2026-04-13	Lorien (UK Financial Sector Organisation)	Data Engineer - SC Cleared	https://www.linkedin.com/jobs/view/4401060317/	C	3.0	skipped		
 2026-04-13	Circuit Medical	AI Engineer	https://www.linkedin.com/jobs/view/4401032927/	C	3.9	skipped		
-2026-04-13	QuantumLoopAI	AI/ML & Prompt Engineer LLM, RAG & Voice Agent	https://www.linkedin.com/jobs/view/4400512502/	B	4.2	cv_ready	applications/cv_quantumloopai_20260413.pdf	
+2026-04-13	QuantumLoopAI	AI/ML & Prompt Engineer LLM, RAG & Voice Agent	https://www.linkedin.com/jobs/view/4400512502/	B	4.2	evaluated	applications/cv_quantumloopai_20260413.pdf	
 2026-04-13	Crossing Hurdles	Geopolitical Risk Analyst	https://www.linkedin.com/jobs/view/4395975935/	D	2.0	skipped		
 2026-04-13	Haystack (Professional Services Network)	Junior Risk Analyst	https://www.linkedin.com/jobs/view/4397279170/	D	2.1	skipped		
 2026-04-13	Insight Global	Python Developer	https://www.linkedin.com/jobs/view/4397232309/	D	2.1	skipped		
@@ -2421,12 +2421,12 @@ date	company	role	url	grade	score	status	pdf_path	notes
 2026-04-13	Sparta Global	Data Consultant - London	https://www.linkedin.com/jobs/view/4398804955/	D	2.4	skipped		
 2026-04-13	Haystack	AI Agent Maker	https://www.linkedin.com/jobs/view/4401021333/	D	2.4	skipped		
 2026-04-13	Hyra	Graduate Software Developer	https://www.linkedin.com/jobs/view/4401033911/	D	2.2	skipped		
-2026-04-13	Techmunity (Industrial AI, Series A)	Machine Learning Engineer	https://www.linkedin.com/jobs/view/4399266656/	B	4.3	cv_ready	applications/cv_techmunity-industrial-ai-series-a_20260413.pdf	
+2026-04-13	Techmunity (Industrial AI, Series A)	Machine Learning Engineer	https://www.linkedin.com/jobs/view/4399266656/	B	4.3	evaluated	applications/cv_techmunity-industrial-ai-series-a_20260413.pdf	
 2026-04-13	Digital Waffle	Artificial Intelligence Consultant	https://www.linkedin.com/jobs/view/4398132221/	D	2.7	skipped		
 2026-04-13	McKinsey & Company	Research Science Specialist - Scientific AI	https://www.linkedin.com/jobs/view/4387213127/	D	2.8	skipped		
 2026-04-13	Projective Group	Graduate Technical Consultant	https://www.linkedin.com/jobs/view/4399623785/	D	2.6	skipped		
 2026-04-13	Banking Circle	Operations Analyst	https://www.linkedin.com/jobs/view/4395985654/	D	2.7	skipped		
-2026-04-13	Fleetcraft	Founding AI Engineer	https://www.linkedin.com/jobs/view/4399503275/	B	4.4	cv_ready	applications/cv_fleetcraft_20260413.pdf	
+2026-04-13	Fleetcraft	Founding AI Engineer	https://www.linkedin.com/jobs/view/4399503275/	B	4.4	evaluated	applications/cv_fleetcraft_20260413.pdf	
 2026-04-13	RealityMine	Data Engineer	https://www.linkedin.com/jobs/view/4399233592/	C	3.2	skipped		
 2026-04-13	Crossing Hurdles	Java Developer | Remote	https://www.linkedin.com/jobs/view/4394772612/	F	1.7	skipped		
 2026-04-13	Crossing Hurdles	Backend Developer	https://www.linkedin.com/jobs/view/4399163141/	D	2.1	skipped		
@@ -2458,9 +2458,9 @@ date	company	role	url	grade	score	status	pdf_path	notes
 2026-04-13	Linkedin	Senior Tester	https://www.linkedin.com/jobs/view/4399017728/	F	0.0	skipped		
 2026-04-13	DataAnnotation	Finance Analyst	https://www.linkedin.com/jobs/view/4400326794/	D	2.1	skipped		
 2026-04-13	Linkedin	Artificial Intelligence Lead (18 month FTC)	https://www.linkedin.com/jobs/view/4401029990/	F	0.0	skipped		
-2026-04-13	Cohere	Software Engineer - Applied ML - UK Public Sector	https://www.linkedin.com/jobs/view/4305811970/	B	4.2	cv_ready	applications/cv_cohere_20260413.pdf	
+2026-04-13	Cohere	Software Engineer - Applied ML - UK Public Sector	https://www.linkedin.com/jobs/view/4305811970/	B	4.2	evaluated	applications/cv_cohere_20260413.pdf	
 2026-04-13	Pareto	Entry Level Grad Scheme	https://www.linkedin.com/jobs/view/4395998411/	F	1.4	skipped		
-2026-04-13	Digital Waffle	Founding AI Engineer	https://www.linkedin.com/jobs/view/4399160277/	B	4.3	cv_ready	applications/cv_digital-waffle_20260413.pdf	
+2026-04-13	Digital Waffle	Founding AI Engineer	https://www.linkedin.com/jobs/view/4399160277/	B	4.3	evaluated	applications/cv_digital-waffle_20260413.pdf	
 2026-04-13	Aviva	Analytics Engineer	https://www.linkedin.com/jobs/view/4397233544/	C	3.0	skipped		
 2026-04-13	OpenPayd	Technical Business Analyst	https://www.linkedin.com/jobs/view/4372499422/	C	3.2	skipped		
 2026-04-13	LIV Golf	Analyst, Team Business Operations	https://www.linkedin.com/jobs/view/4399085000/	D	2.1	skipped		
@@ -2541,7 +2541,7 @@ date	company	role	url	grade	score	status	pdf_path	notes
 2026-04-13	JetBrains	Research Engineer (LLM Training and Performance)	https://www.linkedin.com/jobs/view/4328818082/	D	2.7	skipped		
 2026-04-13	LinkedIn	Join LinkedIn	https://www.linkedin.com/jobs/view/4401072344/	F	0.0	skipped		
 2026-04-13	Linkedin	AI Product Owner	https://www.linkedin.com/jobs/view/4398185080/	F	0.0	skipped		
-2026-04-13	JetBrains	Research Engineer (Agentic Models)	https://www.linkedin.com/jobs/view/4353672521/	A	4.5	cv_ready	applications/cv_jetbrains_20260413.pdf	
+2026-04-13	JetBrains	Research Engineer (Agentic Models)	https://www.linkedin.com/jobs/view/4353672521/	A	4.5	evaluated	applications/cv_jetbrains_20260413.pdf	
 2026-04-13	Crossing Hurdles	Backend Software Engineer | Remote	https://www.linkedin.com/jobs/view/4399159685/	D	2.1	skipped		
 2026-04-13	Mercor	Research Microbiologist	https://www.linkedin.com/jobs/view/4400973114/	F	1.6	skipped		
 2026-04-13	Haystack	Platform Engineer	https://www.linkedin.com/jobs/view/4401021337/	D	2.3	skipped		
