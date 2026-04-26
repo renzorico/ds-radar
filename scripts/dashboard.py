@@ -321,14 +321,14 @@ class DashboardApp(App):
         overflow-y: hidden;
     }
     #job-table {
-        width: 3fr;
+        width: 65%;
         height: 100%;
         border: solid white;
         overflow-x: hidden;
         overflow-y: hidden;
     }
     #detail-pane {
-        width: 2fr;
+        width: 35%;
         height: 100%;
         overflow-x: hidden;
         overflow-y: auto;
