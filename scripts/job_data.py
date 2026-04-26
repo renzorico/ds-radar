@@ -537,6 +537,21 @@ def load_dashboard_records(sort_by: str = "date") -> list[JobRecord]:
     return sort_records(records, sort_by)
 
 
+def load_dashboard_record_summary(url: str) -> str:
+    tracker_rows = load_tsv(TRACKER)
+    row = next((item for item in tracker_rows if item.get("url", "").strip() == url.strip()), None)
+    if row is None:
+        return ""
+
+    scan_index = build_index(load_tsv(SCAN_HISTORY), "url")
+    eval_path = find_eval(row, scan_index)
+    if eval_path is None:
+        return ""
+
+    excerpt = extract_markdown_section(eval_path, ["## Verdict", "## 1. Executive Summary"])
+    return excerpt
+
+
 def _build_enriched_job_record(
     row: dict,
     source_index: dict[str, dict],

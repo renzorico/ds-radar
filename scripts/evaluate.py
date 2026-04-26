@@ -487,9 +487,9 @@ def _assign_grade(overall_score: float) -> str:
     # B = strong realistic fit worth tailoring now.
     # C = plausible but not worth tailoring now.
     # D/F = poor fit or blocked.
-    if overall_score >= 4.4:
+    if overall_score >= 4.7:
         return "A"
-    if overall_score >= 3.6:
+    if overall_score >= 3.8:
         return "B"
     if overall_score >= 2.8:
         return "C"

@@ -30,6 +30,7 @@ try:
         filter_records,
         load_dashboard_records,
         load_dashboard_record_detail,
+        load_dashboard_record_summary,
         normalize_record_status,
         update_tracker_status,
         upsert_rejection_reason,
@@ -42,6 +43,7 @@ except ImportError:
         filter_records,
         load_dashboard_records,
         load_dashboard_record_detail,
+        load_dashboard_record_summary,
         normalize_record_status,
         update_tracker_status,
         upsert_rejection_reason,
@@ -244,8 +246,12 @@ def compact_url(value: str, width: int = 44) -> str:
     return compact_text(value, width)
 
 
-def compact_path(value: str, width: int = 44) -> str:
+def compact_path(value: str, width: int = 96) -> str:
     return compact_text(value, width)
+
+
+def display_path(value: str) -> str:
+    return value.strip() or "---"
 
 
 class DetailPane(Static):
@@ -281,18 +287,18 @@ class DetailPane(Static):
             "[bold cyan]Link[/]",
             compact_url(record.url, 64),
         ]
-        if record.eval_excerpt:
-            lines.extend(["", "[bold cyan]Summary[/]", record.eval_excerpt])
         lines.extend(
             [
                 "",
                 "[bold cyan]Files[/]",
-                f"[bold]eval[/] {compact_path(record.eval_path, 64)}",
-                f"[bold]cv[/] {compact_path(record.cv_path, 64)}",
-                f"[bold]oferta[/] {compact_path(record.oferta_path, 64)}",
-                f"[bold]outreach[/] {compact_path(record.outreach_path, 64)}",
+                f"[bold]eval[/] {display_path(record.eval_path)}",
+                f"[bold]cv[/] {display_path(record.cv_path)}",
+                f"[bold]oferta[/] {display_path(record.oferta_path)}",
+                f"[bold]outreach[/] {display_path(record.outreach_path)}",
             ]
         )
+        if record.eval_excerpt:
+            lines.extend(["", "[bold cyan]Summary[/]", record.eval_excerpt])
         clean_notes = upsert_rejection_reason(record.notes, "")
         if clean_notes:
             lines.extend(["", "[bold cyan]Notes[/]", clean_notes])
@@ -507,6 +513,11 @@ class DashboardApp(App):
         if record is None:
             self.query_one(DetailPane).record = None
             return
+        if record.url not in self._detail_cache:
+            summary = load_dashboard_record_summary(record.url)
+            if summary:
+                record.eval_excerpt = summary
+            self._detail_cache[record.url] = record
         detail = self.query_one(DetailPane)
         detail.record = self._detail_cache.get(record.url, record)
         detail.scroll_y = 0

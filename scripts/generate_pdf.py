@@ -586,6 +586,7 @@ def enforce_cv_consistency(cv_text: str, profile: dict, archetype: str) -> str:
     cv_text = _enforce_experience_titles(cv_text, archetype)
     cv_text = _italicize_company_blurbs(cv_text)
     cv_text = _normalize_experience_spacing(cv_text)
+    cv_text = enforce_cv_header(cv_text, profile, archetype)
     return cv_text.strip()
 
 
@@ -831,6 +832,45 @@ def build_canonical_cv(profile: dict, archetype: str = "ds-product") -> str:
             lines.append(line)
 
     return "\n".join(lines).strip() + "\n"
+
+
+def build_cv_header(profile: dict, archetype: str = "ds-product") -> tuple[str, str, str]:
+    identity = profile.get("identity", {}) or {}
+    contact = profile.get("contact", {}) or {}
+    archetype_config = _archetype_config(archetype)
+
+    name = identity.get("name", "Renzo Rico").strip()
+    location = identity.get("location", "").strip()
+    role_title = str(archetype_config.get("title_line", DEFAULT_CANDIDATE_TITLE)).strip()
+    contact_parts = [
+        location,
+        contact.get("phone", "").strip(),
+        contact.get("email", "").strip(),
+        GITHUB_PROFILE_URL,
+        contact.get("linkedin_url", "").strip(),
+    ]
+    meta_line = " | ".join(part for part in contact_parts if part)
+    return name, role_title, meta_line
+
+
+def enforce_cv_header(cv_text: str, profile: dict, archetype: str) -> str:
+    name, role_title, meta_line = build_cv_header(profile, archetype)
+    required_contact_tokens = [
+        profile.get("contact", {}).get("email", "").strip(),
+        GITHUB_PROFILE_URL,
+        profile.get("contact", {}).get("linkedin_url", "").strip(),
+    ]
+    if not all(required_contact_tokens):
+        raise ValueError("profile/profile.yaml is missing required CV contact fields")
+
+    clean = strip_html_comments(cv_text)
+    lines = clean.splitlines()
+    section_start = next((idx for idx, line in enumerate(lines) if line.startswith("## ")), len(lines))
+    body = "\n".join(lines[section_start:]).strip()
+    header_lines = [f"# {name}", "", role_title, "", meta_line]
+    if body:
+        return "\n".join([*header_lines, "", body]).strip() + "\n"
+    return "\n".join(header_lines).strip() + "\n"
 
 
 def build_profile_fact_block(profile: dict, archetype: str = "ds-product") -> str:
