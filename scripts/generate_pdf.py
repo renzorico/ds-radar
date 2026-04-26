@@ -459,7 +459,7 @@ def _projects_section_lines(project_items: list[dict[str, str]]) -> list[str]:
     for project in project_items:
         lines.extend(["", _project_heading(project)])
         if project.get("tech"):
-            lines.append(project["tech"])
+            lines.append(f"*{project['tech']}*")
         if project.get("summary"):
             lines.append(f"- {project['summary']}")
     return lines
@@ -495,6 +495,63 @@ def _force_title_line(text: str, title_line: str) -> str:
     return "\n".join(lines)
 
 
+def _title_line_to_summary_prefix(title_line: str) -> str:
+    cleaned = str(title_line).strip().lower()
+    mapping = {
+        "data scientist": "Data scientist",
+        "data analyst": "Data analyst",
+        "analytics engineer": "Analytics engineer",
+        "data engineer": "Data engineer",
+        "machine learning engineer": "Machine learning engineer",
+        "ai engineer": "AI engineer",
+    }
+    return mapping.get(cleaned, str(title_line).strip())
+
+
+def _normalize_summary_voice(text: str, title_line: str) -> str:
+    summary_pattern = r"(?ms)(^## Summary\n)(.+?)(?=\n## |\Z)"
+    match = re.search(summary_pattern, text)
+    if not match:
+        return text
+
+    summary_body = match.group(2).strip()
+    prefix = _title_line_to_summary_prefix(title_line)
+    summary_body = re.sub(
+        r"^(Data scientist|Data analyst|Analytics engineer|Data engineer|Machine learning engineer|AI engineer)\b",
+        prefix,
+        summary_body,
+        count=1,
+    )
+    return re.sub(summary_pattern, f"\\1{summary_body}\n", text, count=1)
+
+
+def _italicize_company_blurbs(text: str) -> str:
+    lines = text.splitlines()
+    result: list[str] = []
+    index = 0
+    while index < len(lines):
+        line = lines[index]
+        result.append(line)
+        if line.startswith("### "):
+            lookahead = index + 1
+            while lookahead < len(lines) and not lines[lookahead].strip():
+                result.append(lines[lookahead])
+                lookahead += 1
+
+            if lookahead < len(lines):
+                candidate = lines[lookahead].strip()
+                if (
+                    candidate
+                    and not candidate.startswith(("*", "-", "##", "###"))
+                ):
+                    result.append(f"*{candidate.strip('*')}*")
+                    index = lookahead
+                else:
+                    index = lookahead - 1
+        index += 1
+    return "\n".join(result)
+
+
 def _normalize_experience_spacing(text: str) -> str:
     text = re.sub(r"(\*.*\*)\n(- )", r"\1\n\n\2", text)
     text = re.sub(r"(^### .+\n)(- )", r"\1\n\2", text, flags=re.MULTILINE)
@@ -515,16 +572,19 @@ def enforce_cv_consistency(cv_text: str, profile: dict, archetype: str) -> str:
     strong_skills = [str(item).strip() for item in tech.get("strong_skills", []) if str(item).strip()]
     must_match = [str(item).strip() for item in tech.get("must_match_skills", []) if str(item).strip()]
     project_items = [_project_record(str(item).strip()) for item in profile.get("projects", []) if str(item).strip()]
+    title_line = str(archetype_config.get("title_line", DEFAULT_CANDIDATE_TITLE)).strip()
 
     cv_text = _force_title_line(
         cv_text,
-        str(archetype_config.get("title_line", DEFAULT_CANDIDATE_TITLE)).strip(),
+        title_line,
     )
     skills_block = "\n".join(["## Skills", *_skills_section_lines(strong_skills, must_match, archetype_config)])
     projects_block = "\n".join(_projects_section_lines(project_items))
     cv_text = _replace_markdown_section(cv_text, "Skills", skills_block)
     cv_text = _replace_markdown_section(cv_text, "Projects", projects_block)
+    cv_text = _normalize_summary_voice(cv_text, title_line)
     cv_text = _enforce_experience_titles(cv_text, archetype)
+    cv_text = _italicize_company_blurbs(cv_text)
     cv_text = _normalize_experience_spacing(cv_text)
     return cv_text.strip()
 
