@@ -46,6 +46,19 @@ def build_job_key(url: str = "", company: str = "", title: str = "") -> str:
     return digest[:16]
 
 
+def build_job_artifact_suffix(url: str = "", company: str = "", title: str = "") -> str:
+    job_key = build_job_key(url=url, company=company, title=title)
+    if job_key:
+        return job_key
+
+    canonical_url = canonicalize_job_url(url)
+    matches = re.findall(r"(\d{6,})", canonical_url)
+    if matches:
+        return matches[-1]
+
+    return "job"
+
+
 def load_artifact_index() -> dict[str, dict]:
     if not ARTIFACT_INDEX.exists():
         return {}

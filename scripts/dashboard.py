@@ -7,6 +7,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import subprocess
+import sys
 from pathlib import Path
 from textwrap import shorten
 
@@ -114,7 +117,7 @@ HELP_TEXT = """\
   [bold]x[/] skipped   [bold]r[/] rejected  [bold]f[/] sponsor fail  [bold]s[/] seniority fail
 
 [bold cyan]Other[/]
-  [bold]R[/] reload   [bold]Ctrl+P[/] options   [bold]q[/] quit
+  [bold]w[/] oferta   [bold]o[/] outreach   [bold]R[/] reload   [bold]Ctrl+P[/] options   [bold]q[/] quit
 """
 
 
@@ -175,7 +178,7 @@ class ShortcutBar(Static):
 
     def render(self) -> Text:
         return Text(
-            "h/l tabs  a applied  x skipped  c callback  i interview  r rejected  f sponsor fail  s seniority fail  q quit  R reload  / search  ^p options",
+            "h/l tabs  a applied  x skipped  c callback  i interview  r rejected  f sponsor fail  s seniority fail  w oferta  o outreach  q quit  R reload  / search  ^p options",
             style="dim",
         )
 
@@ -323,6 +326,8 @@ class DashboardApp(App):
         Binding("r", "status_rejected", show=False),
         Binding("f", "status_sponsor_fail", show=False),
         Binding("s", "status_seniority_fail", show=False),
+        Binding("w", "generate_oferta", show=False),
+        Binding("o", "generate_outreach", show=False),
         Binding("1", "filter_1", show=False),
         Binding("2", "filter_2", show=False),
         Binding("3", "filter_3", show=False),
@@ -353,6 +358,7 @@ class DashboardApp(App):
         self._search_active = False
         self._header_sort_key = sort_by
         self._header_sort_reverse = sort_by == "date"
+        self.theme = "catppuccin-macchiato"
 
     def compose(self) -> ComposeResult:
         yield FilterBar(id="filter-bar")
@@ -461,16 +467,12 @@ class DashboardApp(App):
         if record is None:
             self.query_one(DetailPane).record = None
             return
-        detail_record = self._detail_cache.get(record.url)
-        if detail_record is None:
-            detail_record = load_dashboard_record_detail(record.url) or record
-            self._detail_cache[record.url] = detail_record
         detail = self.query_one(DetailPane)
-        detail.record = detail_record
+        detail.record = self._detail_cache.get(record.url, record)
         detail.scroll_y = 0
 
     def _set_status_msg(self, message: str) -> None:
-        return
+        self.notify(message, timeout=2.5)
 
     def _focus_row_by_url(self, url: str, fallback_index: int = 0) -> None:
         table = self.query_one("#job-table", DataTable)
@@ -580,6 +582,34 @@ class DashboardApp(App):
         self._focus_row_by_url(focus_url, row_index)
         self._set_status_msg(f"{record.company} -> {format_status(record)}")
 
+    def _run_optional_artifact(self, script_name: str, label: str) -> None:
+        record = self._current_record()
+        if record is None:
+            self._set_status_msg("No row selected")
+            return
+
+        self._set_status_msg(f"Running {label} for {record.company}")
+        proc = subprocess.run(
+            [sys.executable, str(REPO_ROOT / "scripts" / script_name), record.url],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+        )
+
+        if proc.returncode != 0:
+            detail = (proc.stderr or proc.stdout).strip().splitlines()
+            suffix = f": {detail[-1]}" if detail else ""
+            self._set_status_msg(f"{label} failed{suffix}")
+            return
+
+        refreshed = load_dashboard_record_detail(record.url)
+        if refreshed is not None:
+            self._detail_cache[record.url] = refreshed
+        else:
+            self._detail_cache.pop(record.url, None)
+        self._update_detail()
+        self._set_status_msg(f"{label} generated for {record.company}")
+
     def action_status_applied(self) -> None: self._set_status("applied")
     def action_status_skipped(self) -> None: self._set_status("skipped")
     def action_status_callback(self) -> None: self._set_status("callback")
@@ -587,6 +617,8 @@ class DashboardApp(App):
     def action_status_rejected(self) -> None: self._set_status("rejected")
     def action_status_sponsor_fail(self) -> None: self._set_status("sponsorship_fail")
     def action_status_seniority_fail(self) -> None: self._set_status("seniority_fail")
+    def action_generate_oferta(self) -> None: self._run_optional_artifact("oferta.py", "Oferta")
+    def action_generate_outreach(self) -> None: self._run_optional_artifact("contacto.py", "Outreach")
 
     def action_reload(self) -> None:
         current = self._current_record()
@@ -642,8 +674,12 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="ds-radar interactive dashboard")
     parser.add_argument("--sort", default="date", choices=["date", "grade", "company", "score"])
     parser.add_argument("--filter", default="all", choices=list(FILTER_OPTIONS))
+    parser.add_argument("--model", default=None, help="Model override for optional dashboard actions")
     parser.add_argument("--dump-row", type=int, default=None, metavar="INDEX")
     args = parser.parse_args()
+
+    if args.model:
+        os.environ["MODEL_OVERRIDE"] = args.model
 
     session = load_dashboard_session()
     session_filter = session.get("filter_name", "all")

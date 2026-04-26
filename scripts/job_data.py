@@ -474,7 +474,7 @@ def filter_records(records: list[JobRecord], filter_name: str) -> list[JobRecord
     if filter_name == "b_plus":
         return [r for r in records if grade_passes(r.grade, "B+")]
     if filter_name == "to_apply":
-        return [r for r in records if (r.status or "").lower() == "cv_ready"]
+        return [r for r in records if r.ready_to_apply]
     if filter_name == "applied":
         return [r for r in records if (r.status or "").lower() == "applied"]
     if filter_name == "callback":
@@ -488,7 +488,10 @@ def filter_records(records: list[JobRecord], filter_name: str) -> list[JobRecord
 
 def load_dashboard_records(sort_by: str = "date") -> list[JobRecord]:
     tracker_rows = load_tsv(TRACKER)
+    source_index = build_index(load_tsv(SOURCE_HISTORY), "target_url")
+    scan_index = build_index(load_tsv(SCAN_HISTORY), "url")
     records: list[JobRecord] = []
+
     for row in tracker_rows:
         status, rejection_reason = normalize_record_status(
             row.get("status", ""),
@@ -497,30 +500,40 @@ def load_dashboard_records(sort_by: str = "date") -> list[JobRecord]:
         notes = row.get("notes", "").strip()
         if rejection_reason:
             notes = upsert_rejection_reason(notes, rejection_reason)
+
+        url = row.get("url", "").strip()
+        pdf_path = row.get("pdf_path", "").strip()
+        cv_exists = bool(pdf_path) and (REPO_ROOT / pdf_path).exists()
+        scan_row = scan_index.get(url, {})
+        jd_src = notes if notes in ("REAL", "MOCK") else "?"
+        spons = "FAIL" if rejection_reason == "sponsorship_fail" else "PASS"
+        ready_to_apply = status == "cv_ready" and cv_exists and spons == "PASS"
+
         records.append(
             JobRecord(
                 date=row.get("date", "").strip(),
                 grade=row.get("grade", "?").strip(),
                 score=row.get("score", "?").strip(),
-                source="linkedin",
-                jd_src="REAL",
-                spons="FAIL" if rejection_reason == "sponsorship_fail" else "PASS",
-                cv="?",
+                source=infer_source(url, source_index),
+                jd_src=jd_src,
+                spons=spons,
+                cv="yes" if cv_exists else "no",
                 ofe="?",
                 con="?",
                 company=row.get("company", "?").strip(),
                 role=row.get("role", "?").strip(),
                 status=status,
-                url=row.get("url", "").strip(),
+                url=url,
                 notes=notes,
-                eval_path="",
+                eval_path=scan_row.get("eval_path", "").strip(),
                 eval_excerpt="",
-                cv_path=row.get("pdf_path", "").strip(),
+                cv_path=pdf_path if cv_exists else "",
                 oferta_path="",
                 outreach_path="",
-                ready_to_apply=status == "cv_ready",
+                ready_to_apply=ready_to_apply,
             )
         )
+
     return sort_records(records, sort_by)
 
 

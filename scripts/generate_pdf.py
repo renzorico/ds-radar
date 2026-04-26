@@ -21,9 +21,9 @@ from pathlib import Path
 import markdown as md
 import yaml
 try:
-    from identity import build_job_key, record_artifact_identity
+    from identity import build_job_artifact_suffix, build_job_key, record_artifact_identity
 except ImportError:  # pragma: no cover - module execution fallback
-    from scripts.identity import build_job_key, record_artifact_identity
+    from scripts.identity import build_job_artifact_suffix, build_job_key, record_artifact_identity
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 
@@ -998,10 +998,11 @@ def inject_keywords(cv: str, keywords: list[str]) -> str:
 
 # ── Step 4: Save tailored CV + render PDF ─────────────────────────────────────
 
-def build_output_paths(company: str) -> tuple[Path, Path]:
+def build_output_paths(company: str, role: str, url: str) -> tuple[Path, Path]:
     today = date.today().strftime("%Y%m%d")
     company_slug = slugify(company)
-    stem = f"cv_{company_slug}_{today}"
+    artifact_suffix = build_job_artifact_suffix(url=url, company=company, title=role)
+    stem = f"cv_{company_slug}_{artifact_suffix}_{today}"
     APPLICATIONS_DIR.mkdir(parents=True, exist_ok=True)
     return APPLICATIONS_DIR / f"{stem}.md", APPLICATIONS_DIR / f"{stem}.pdf"
 
@@ -1304,7 +1305,7 @@ def generate_pdf(eval_path: "Path | str") -> str:
         print(f"[KEYWORDS] {keyword_coverage_matched}/{keyword_coverage_total} coverage ({keyword_coverage_pct}%)")
     # TODO: pass keyword_coverage_* into save_cv() header comment or tracker notes field
 
-    markdown_path, pdf_path = build_output_paths(parsed["company"])
+    markdown_path, pdf_path = build_output_paths(parsed["company"], parsed["role"], parsed["url"])
     print(
         "[CV] Outputs planned: "
         f"markdown={markdown_path.relative_to(REPO_ROOT)} "

@@ -445,16 +445,45 @@ def run_json_prompt(
     temperature: float = 0.0,
     provider: str | None = None,
 ) -> tuple[dict[str, Any], LLMUsage, str]:
-    raw_text, usage = run_text_prompt(
-        task=task,
-        system=system,
-        prompt=prompt,
-        max_output_tokens=max_output_tokens,
-        temperature=temperature,
-        provider=provider,
-    )
-    cleaned = _strip_code_fences(raw_text)
-    return json.loads(cleaned), usage, cleaned
+    provider = provider or get_provider(task)
+    model = get_model(task, provider=provider)
+    attempts = 2 if provider == "anthropic" and task == "eval" else 1
+    last_error: RuntimeError | None = None
+
+    for attempt in range(1, attempts + 1):
+        raw_text, usage = run_text_prompt(
+            task=task,
+            system=system,
+            prompt=prompt,
+            max_output_tokens=max_output_tokens,
+            temperature=temperature,
+            provider=provider,
+        )
+        cleaned = _strip_code_fences(raw_text)
+        preview = cleaned.replace("\n", " ")[:240] if cleaned else "<empty>"
+
+        if not cleaned:
+            last_error = RuntimeError(
+                f"{provider}/{model} returned empty text for JSON task '{task}' "
+                f"(attempt {attempt}/{attempts})"
+            )
+            if attempt < attempts:
+                continue
+            raise last_error
+
+        try:
+            return _safe_json_loads(cleaned), usage, cleaned
+        except json.JSONDecodeError as exc:
+            last_error = RuntimeError(
+                f"{provider}/{model} returned invalid JSON for task '{task}' "
+                f"(attempt {attempt}/{attempts}): {exc}. raw_preview={preview}"
+            )
+            if attempt < attempts:
+                continue
+            raise last_error from exc
+
+    assert last_error is not None
+    raise last_error
 
 
 def run_job_evaluation(*, system: str, prompt: str) -> tuple[dict[str, Any], LLMUsage]:

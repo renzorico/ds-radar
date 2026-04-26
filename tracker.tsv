@@ -311,7 +311,7 @@ date	company	role	url	grade	score	status	pdf_path	notes
 2026-04-07	Linkedin	Senior AI Solutions Engineer	https://www.linkedin.com/jobs/view/4363415928/	F	0.0	skipped		
 2026-04-07	Nscale	People Data Analyst	https://www.linkedin.com/jobs/view/4392503098/	D	2.9	skipped		
 2026-04-07	Linkedin	Senior AI Engineer	https://www.linkedin.com/jobs/view/4368763394/	F	0.0	skipped		
-2026-04-07	QuantumLoopAI	AI/ML & Prompt Engineer LLM, RAG & Voice Agent	https://www.linkedin.com/jobs/view/4392882880/	B	4.0	applied	applications/cv_quantumloopai_20260408.pdf	
+2026-04-07	QuantumLoopAI	AI/ML & Prompt Engineer LLM, RAG & Voice Agent	https://www.linkedin.com/jobs/view/4392882880/	B	4.0	callback	applications/cv_quantumloopai_20260408.pdf	
 2026-04-07	Zoopla	Data Analyst	https://www.linkedin.com/jobs/view/4382948566/	C	3.3	skipped		
 2026-04-07	DP World	HR Data Analyst	https://www.linkedin.com/jobs/view/4391589394/	D	2.8	skipped		
 2026-04-07	Savills	Research Analyst	https://www.linkedin.com/jobs/view/4397060528/	D	2.1	skipped		
@@ -1518,7 +1518,7 @@ date	company	role	url	grade	score	status	pdf_path	notes
 2026-04-13	Rockstar Games	Data Scientist, Game Analytics	https://www.linkedin.com/jobs/view/4376085403/	C	3.2	skipped		
 2026-04-13	Digital Gurus / Manchester SaaS Company	Data Analyst	https://www.linkedin.com/jobs/view/4387162020/	C	3.2	skipped		
 2026-04-13	Ipsos	Junior Data Scientist - Audience Measurement	https://www.linkedin.com/jobs/view/4398371511/	C	3.3	skipped		
-2026-04-13	Bending Spoons	Graduate Data Scientist	https://www.linkedin.com/jobs/view/4398107507/	B	4.3	cv_ready	applications/cv_bending-spoons_20260413.pdf	
+2026-04-13	Bending Spoons	Graduate Data Scientist	https://www.linkedin.com/jobs/view/4398107507/	B	4.3	skipped	applications/cv_bending-spoons_20260413.pdf	
 2026-04-13	Deloitte	Data Analyst	https://www.linkedin.com/jobs/view/4398141521/	D	2.6	skipped		
 2026-04-13	Linkedin	Data Analyst	https://www.linkedin.com/jobs/view/4398214934/	F	0.0	skipped		
 2026-04-13	Legal & General (L&G)	Data Scientist	https://www.linkedin.com/jobs/view/4398491920/	C	3.0	skipped		
@@ -2184,7 +2184,7 @@ date	company	role	url	grade	score	status	pdf_path	notes
 2026-04-13	Global Fintech Scale-up (via numi)	Data Engineer	https://www.linkedin.com/jobs/view/4398842212/	C	3.6	skipped		
 2026-04-13	Lloyds Banking Group	Software Engineer (Security Data and AI)	https://www.linkedin.com/jobs/view/4400228326/	D	2.4	skipped		
 2026-04-13	Techtelligence (Today Digital)	Graduate Data Platform Engineer	https://www.linkedin.com/jobs/view/4399110043/	C	3.1	skipped		
-2026-04-13	Saragossa	AI Software Engineer, LLMs - Up to £100,000 base salary plus equity	https://www.linkedin.com/jobs/view/4398237032/	B	4.3	cv_ready	applications/cv_saragossa_20260413.pdf	
+2026-04-13	Saragossa	AI Software Engineer, LLMs - Up to £100,000 base salary plus equity	https://www.linkedin.com/jobs/view/4398237032/	B	4.3	rejected	applications/cv_saragossa_20260413.pdf	reject:sponsorship_fail
 2026-04-13	Large UK Law Firm (via Harnham)	Analytics Engineer (12 month FTC)	https://www.linkedin.com/jobs/view/4396356165/	C	3.5	skipped		
 2026-04-13	Bending Spoons	AI research engineer	https://www.linkedin.com/jobs/view/4398723042/	C	3.6	skipped		
 2026-04-13	McKinsey & Company	Junior Associate - McKinsey Tech & AI	https://www.linkedin.com/jobs/view/4360046390/	C	3.0	skipped		
@@ -2284,7 +2284,7 @@ date	company	role	url	grade	score	status	pdf_path	notes
 2026-04-13	Welsh Water	AI Graduate	https://www.linkedin.com/jobs/view/4398711322/	D	2.2	skipped		
 2026-04-13	Crossing Hurdles	Python Developer	https://www.linkedin.com/jobs/view/4387994835/	D	2.6	skipped		
 2026-04-13	Admiral Money	Analytics Engineer	https://www.linkedin.com/jobs/view/4395433428/	C	3.1	skipped		
-2026-04-13	Seedtag	Machine Learning Engineer	https://www.linkedin.com/jobs/view/4399254180/	B	4.2	cv_ready	applications/cv_seedtag_20260413.pdf	
+2026-04-13	Seedtag	Machine Learning Engineer	https://www.linkedin.com/jobs/view/4399254180/	B	4.2	rejected	applications/cv_seedtag_20260413.pdf	
 2026-04-13	Haystack (via recruiter)	Graduate Software Engineer	https://www.linkedin.com/jobs/view/4401013743/	D	2.1	skipped		
 2026-04-13	BrainRocket	Data Engineer (Relocation to Malta Required)	https://www.linkedin.com/jobs/view/4381701641/	D	2.4	skipped		
 2026-04-13	LinkedIn (via Spencer Scott - Technology Recruitment)	Python Developer	https://www.linkedin.com/jobs/view/4399022717/	D	2.7	skipped		
@@ -2712,3 +2712,77 @@ date	company	role	url	grade	score	status	pdf_path	notes
 2026-04-13	Rightmovecareers	Security Operations Manager	https://job-boards.eu.greenhouse.io/rightmovecareers/jobs/4728487101	F	0.0	skipped		
 2026-04-13	Cloudflare	Territory Account Executive, Vancouver	https://boards.greenhouse.io/cloudflare/jobs/7803071?gh_jid=7803071	F	1.2	skipped		
 2026-04-13	Cloudflare	U.S. Public Policy and AI Innovation Intern (Summer 2026)	https://boards.greenhouse.io/cloudflare/jobs/7802906?gh_jid=7802906	D	2.1	skipped		
+2026-04-26	Deepmind	Technical Program Manager, Agents Innovation - 12 Month FTC	https://job-boards.greenhouse.io/deepmind/jobs/7839536	F	0.0	skipped		
+2026-04-26	Monzo	Data Protection Manager	https://job-boards.greenhouse.io/monzo/jobs/7831702	F	0.0	skipped		
+2026-04-26	Monzo	Director of Media	https://job-boards.greenhouse.io/monzo/jobs/7846346	F	0.0	skipped		
+2026-04-26	Monzo	Financial Health Lead	https://job-boards.greenhouse.io/monzo/jobs/7840997	F	0.0	skipped		
+2026-04-26	Monzo	Lead Brand Designer	https://job-boards.greenhouse.io/monzo/jobs/7806463	F	0.0	skipped		
+2026-04-26	Monzo	Operations Manager, Complaints and Vulnerability	https://job-boards.greenhouse.io/monzo/jobs/7837507	F	0.0	skipped		
+2026-04-26	Monzo	Senior Legal Counsel, Commercial, IP & AI	https://job-boards.greenhouse.io/monzo/jobs/7836687	F	0.0	skipped		
+2026-04-26	Monzo	Senior Programmatic Executive	https://job-boards.greenhouse.io/monzo/jobs/7850000	F	0.0	skipped		
+2026-04-26	Cloudflare	Director, Global Security Incident Response	https://boards.greenhouse.io/cloudflare/jobs/7812499?gh_jid=7812499	F	0.0	skipped		
+2026-04-26	Cloudflare	IT Operations Manager	https://boards.greenhouse.io/cloudflare/jobs/7827219?gh_jid=7827219	F	0.0	skipped		
+2026-04-26	Cloudflare	Senior Account Executive, LATAM	https://boards.greenhouse.io/cloudflare/jobs/7839183?gh_jid=7839183	F	0.0	skipped		
+2026-04-26	Cloudflare	Senior Engineering Manager - Workers KV	https://boards.greenhouse.io/cloudflare/jobs/7841019?gh_jid=7841019	F	0.0	skipped		
+2026-04-26	Cloudflare	Senior Enterprise Account Executive - Brazil	https://boards.greenhouse.io/cloudflare/jobs/7826565?gh_jid=7826565	F	0.0	skipped		
+2026-04-26	Cloudflare	Senior Majors Account Executive - Los Angeles	https://boards.greenhouse.io/cloudflare/jobs/7848143?gh_jid=7848143	F	0.0	skipped		
+2026-04-26	Cloudflare	Senior Named Account Executive	https://boards.greenhouse.io/cloudflare/jobs/7836736?gh_jid=7836736	F	0.0	skipped		
+2026-04-26	Cloudflare	Senior Named Account Executive, Boston	https://boards.greenhouse.io/cloudflare/jobs/7842776?gh_jid=7842776	F	0.0	skipped		
+2026-04-26	Cloudflare	Senior Named Account Executive, Canada	https://boards.greenhouse.io/cloudflare/jobs/7818947?gh_jid=7818947	F	0.0	skipped		
+2026-04-26	Cloudflare	Senior Named Account Executive, Las Vegas	https://boards.greenhouse.io/cloudflare/jobs/7807860?gh_jid=7807860	F	0.0	skipped		
+2026-04-26	Cloudflare	Senior SCM Functional Consultant	https://boards.greenhouse.io/cloudflare/jobs/7817793?gh_jid=7817793	F	0.0	skipped		
+2026-04-26	Cloudflare	Senior Security Engineer - Security Technology Delivery	https://boards.greenhouse.io/cloudflare/jobs/7821913?gh_jid=7821913	F	0.0	skipped		
+2026-04-26	Cloudflare	Senior Software Engineer — Client Mobile and Desktop Apps	https://boards.greenhouse.io/cloudflare/jobs/7243935?gh_jid=7243935	F	0.0	skipped		
+2026-04-26	Cloudflare	Senior Solutions Architect	https://boards.greenhouse.io/cloudflare/jobs/7820696?gh_jid=7820696	F	0.0	skipped		
+2026-04-26	Cloudflare	Senior Solutions Engineer - Mid-Market - Austin	https://boards.greenhouse.io/cloudflare/jobs/7799134?gh_jid=7799134	F	0.0	skipped		
+2026-04-26	Cloudflare	Senior Solutions Engineer, Named Accounts - San Francisco	https://boards.greenhouse.io/cloudflare/jobs/7826822?gh_jid=7826822	F	0.0	skipped		
+2026-04-26	Cloudflare	Senior Strategic Solutions Engineer, Bengaluru	https://boards.greenhouse.io/cloudflare/jobs/7822857?gh_jid=7822857	F	0.0	skipped		
+2026-04-26	Cloudflare	Senior Territory Account Executive	https://boards.greenhouse.io/cloudflare/jobs/7774534?gh_jid=7774534	F	0.0	skipped		
+2026-04-26	Cloudflare	Senior Territory Account Executive, Digital Native	https://boards.greenhouse.io/cloudflare/jobs/7830335?gh_jid=7830335	F	0.0	skipped		
+2026-04-26	Cloudflare	Solutions Engineer Manager, Associate Programs	https://boards.greenhouse.io/cloudflare/jobs/7826916?gh_jid=7826916	F	0.0	skipped		
+2026-04-26	Cloudflare	Strategic Partnerships Director, Content & AI Ecosystem	https://boards.greenhouse.io/cloudflare/jobs/7673477?gh_jid=7673477	F	0.0	skipped		
+2026-04-26	Rightmovecareers	Major Account Manager	https://job-boards.eu.greenhouse.io/rightmovecareers/jobs/4839963101	F	0.0	skipped		
+2026-04-26	Rightmovecareers	QA Engineering Manager	https://job-boards.eu.greenhouse.io/rightmovecareers/jobs/4753347101	F	0.0	skipped		
+2026-04-26	Rightmovecareers	Sales Director - South	https://job-boards.eu.greenhouse.io/rightmovecareers/jobs/4792528101	F	0.0	skipped		
+2026-04-26	Highbrow Technology Inc	Research Analyst (AI / LLM | Data & Python)	https://www.linkedin.com/jobs/view/4405749007/	F	0.0	skipped		
+2026-04-26	Lawrence Harvey	Data Analyst	https://www.linkedin.com/jobs/view/4403620518/	F	0.0	skipped		
+2026-04-26	Rev & Regs	Data Analyst	https://www.linkedin.com/jobs/view/4405628734/	F	0.0	skipped		
+2026-04-26	Anson McCade	Quantitative Researcher	https://www.linkedin.com/jobs/view/4403712953/	F	0.0	skipped		
+2026-04-26	Linkedin	Data Scientist - Bayesian MMM (PyMC)	https://www.linkedin.com/jobs/view/4403640073/	F	0.0	skipped		
+2026-04-26	Ventula Consulting	MMM, Bayesian, PyMC Data Scientist	https://www.linkedin.com/jobs/view/4403640064/	F	0.0	skipped		
+2026-04-26	Wise	Lead Product Analyst - Onboarding	https://www.linkedin.com/jobs/view/4405356253/	F	0.0	skipped		
+2026-04-26	Harrington Starr	Quantitative Analyst - Execution	https://www.linkedin.com/jobs/view/4405807484/	F	0.0	skipped		
+2026-04-26	Revoco	Senior Data Scientist	https://www.linkedin.com/jobs/view/4404750081/	F	0.0	skipped		
+2026-04-26	Eden Smith Group	Senior Data Scientist	https://www.linkedin.com/jobs/view/4403248517/	F	0.0	skipped		
+2026-04-26	Highbrow Technology Inc	Data Analysis Engineer – Python / SQL / AI	https://www.linkedin.com/jobs/view/4405734784/	F	0.0	skipped		
+2026-04-26	Harnham	Data Analyst (SQL, Power BI)	https://www.linkedin.com/jobs/view/4400775362/	D	2.0	skipped		
+2026-04-26	hackajob	Lead Analyst	https://www.linkedin.com/jobs/view/4405795105/	F	0.0	skipped		
+2026-04-26	Dojo	Senior Data Scientist	https://www.linkedin.com/jobs/view/4406398776/	F	0.0	skipped		
+2026-04-26	Finrox Recruitment	Analyst	https://www.linkedin.com/jobs/view/4401661503/	F	0.0	skipped		
+2026-04-26	Jack & Jill	Senior Data Scientist at Lendable.co.uk	https://www.linkedin.com/jobs/view/4406891051/	F	0.0	skipped		
+2026-04-26	Finatal	BI Analyst/Lead	https://www.linkedin.com/jobs/view/4406616836/	F	0.0	skipped		
+2026-04-26	hackajob	Senior Product Analyst (12 Month FTC)	https://www.linkedin.com/jobs/view/4404494104/	F	0.0	skipped		
+2026-04-26	Wise	Lead Product Analyst - Business Account Management	https://www.linkedin.com/jobs/view/4405346426/	F	0.0	skipped		
+2026-04-26	Harnham	Senior Data Scientist	https://www.linkedin.com/jobs/view/4405011451/	F	0.0	skipped		
+2026-04-26	Dojo	Senior Data Scientist	https://www.linkedin.com/jobs/view/4403754702/	F	0.0	skipped		
+2026-04-26	hackajob	Principal Data Analyst	https://www.linkedin.com/jobs/view/4391622893/	F	0.0	skipped		
+2026-04-26	Netcompany	Senior Performance Analyst	https://www.linkedin.com/jobs/view/4403212460/	F	0.0	skipped		
+2026-04-26	Nicholson Glover	Analytics Consultant / Senior Associate	https://www.linkedin.com/jobs/view/4401965620/	F	0.0	skipped		
+2026-04-26	Medpace	Statistical Analyst (London, Entry Level)	https://www.linkedin.com/jobs/view/4330458424/	F	0.0	skipped		
+2026-04-26	Jack & Jill	Senior Data Scientist (£85,000–£105,000) at Faculty	https://www.linkedin.com/jobs/view/4404576183/	F	0.0	skipped		
+2026-04-26	lululemon	Senior Data Analyst	https://www.linkedin.com/jobs/view/4381771137/	F	0.0	skipped		
+2026-04-26	Harnham	Lead Product Analyst	https://www.linkedin.com/jobs/view/4400791232/	F	0.0	skipped		
+2026-04-26	Reed	Technical Data Analyst	https://www.linkedin.com/jobs/view/4403754189/	F	0.0	skipped		
+2026-04-26	London Business School	Senior Data Analyst- Education	https://www.linkedin.com/jobs/view/4404976223/	F	0.0	skipped		
+2026-04-26	Valtech	Lead Data Scientist	https://www.linkedin.com/jobs/view/4402557400/	F	0.0	skipped		
+2026-04-26	Glocomms	Senior Analyst - Data Science	https://www.linkedin.com/jobs/view/4401618005/	F	0.0	skipped		
+2026-04-26	Harnham	Principal Data Scientist	https://www.linkedin.com/jobs/view/4405353216/	F	0.0	skipped		
+2026-04-26	American Express Global Business Travel	Data Science Manager	https://www.linkedin.com/jobs/view/4402839729/	F	0.0	skipped		
+2026-04-26	Confidential Careers	Senior Data Scientist	https://www.linkedin.com/jobs/view/4405631517/	F	0.0	skipped		
+2026-04-26	Octavius Finance	Long Short Systematic Credit Quantitative Researcher – Asset Manager	https://www.linkedin.com/jobs/view/4404770918/	F	0.0	skipped		
+2026-04-26	Aquent	B2B Marketing Insights Analyst [209403]	https://www.linkedin.com/jobs/view/4402640199/	F	0.0	skipped		
+2026-04-26	Virgin Atlantic	Senior Data Analyst	https://www.linkedin.com/jobs/view/4405651982/	F	0.0	skipped		
+2026-04-26	Harnham	Senior Analyst	https://www.linkedin.com/jobs/view/4403062171/	F	0.0	skipped		
+2026-04-26	Linkedin	Senior Data Scientist	https://www.linkedin.com/jobs/view/4403876891/	F	0.0	skipped		
+2026-04-26	Linkedin	Senior Quantitative Researcher/Portfolio Manager needed to 'Own the Alpha'	https://www.linkedin.com/jobs/view/4404079449/	F	0.0	skipped		
+2026-04-26	Anson McCade	Machine Learning Equities Quantitative Researcher	https://www.linkedin.com/jobs/view/4403743351/	F	0.0	skipped		

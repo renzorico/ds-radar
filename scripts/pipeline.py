@@ -6,8 +6,10 @@ Chains scan-queue.txt → evaluate → pdf (B+ only) → tracker.tsv
 No API calls, no Playwright. Import logic from evaluate.py and generate_pdf.py.
 """
 
+import argparse
 import csv
 import json
+import os
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date
@@ -107,29 +109,39 @@ def _save_state(url_status: dict[str, str]) -> None:
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description="Process queued jobs through eval, CV, and optional extras.")
+    parser.add_argument("--parallel", type=int, default=3, help="Number of worker threads.")
+    parser.add_argument("--resume", action="store_true", help="Skip succeeded items in scan-queue.state.json.")
+    parser.add_argument("--retry-failed", action="store_true", help="When resuming, retry previously failed items.")
+    parser.add_argument("--with-oferta", action="store_true", help="Generate deep offer analysis for B+ roles.")
+    parser.add_argument("--with-outreach", action="store_true", help="Generate outreach drafts for B+ roles.")
+    parser.add_argument("--model", help="Model override for the full run, e.g. gpt-5.4 or claude-haiku-4-5-20251001.")
+    args = parser.parse_args()
+
+    if args.model:
+        os.environ["MODEL_OVERRIDE"] = args.model
+
     # Step 1 — read queue
     if not SCAN_QUEUE.exists() or SCAN_QUEUE.stat().st_size == 0:
-        print("[PIPELINE] scan-queue.txt is empty. Run scan.py first.")
+        print(
+            "[PIPELINE] scan-queue.txt is empty. "
+            "No pending URLs are queued; if you just ran scan.py, it found 0 new URLs after dedupe."
+        )
         sys.exit(0)
 
     urls = [u.strip() for u in SCAN_QUEUE.read_text(encoding="utf-8").splitlines() if u.strip()]
     if not urls:
-        print("[PIPELINE] scan-queue.txt is empty. Run scan.py first.")
+        print(
+            "[PIPELINE] scan-queue.txt is empty. "
+            "No pending URLs are queued; if you just ran scan.py, it found 0 new URLs after dedupe."
+        )
         sys.exit(0)
 
-    # Parse --parallel N (default 1)
-    parallel = 1
-    if "--parallel" in sys.argv:
-        idx = sys.argv.index("--parallel")
-        try:
-            parallel = max(1, int(sys.argv[idx + 1]))
-        except (IndexError, ValueError):
-            print("[PIPELINE] --parallel requires an integer argument")
-            sys.exit(1)
-
-    resume = "--resume" in sys.argv
-    retry_failed = "--retry-failed" in sys.argv
-    no_outreach = "--no-outreach" in sys.argv
+    parallel = max(1, args.parallel)
+    resume = args.resume
+    retry_failed = args.retry_failed
+    with_oferta = args.with_oferta
+    with_outreach = args.with_outreach
 
     # Apply resume filter
     if resume:
@@ -159,6 +171,20 @@ def main() -> None:
     def _process_result(result: dict) -> None:
         """PDF generation + tracker write for one evaluated result. Called as each future completes."""
         if result.get("skipped"):
+            url = result.get("url", "")
+            if result.get("skip_reason") == "closed_application" and url and url not in tracked_urls:
+                append_tracker_row({
+                    "date": today,
+                    "company": result.get("company", "?"),
+                    "role": result.get("title", ""),
+                    "url": url,
+                    "grade": "",
+                    "score": "",
+                    "status": "skipped",
+                    "pdf_path": "",
+                    "notes": result.get("skip_detail", "closed_application"),
+                })
+                tracked_urls.add(url)
             return
 
         url = result["url"]
@@ -180,28 +206,29 @@ def main() -> None:
             except Exception as e:
                 print(f"  → PDF error for {company}: {e}")
 
-            try:
-                parsed = _oferta_mod.parse_eval_deep(eval_path)
-                jd = {"title": parsed["title"], "company": parsed["company"],
-                      "location": "See eval", "salary": "See eval"}
-                if parsed["jd_source"] == "REAL" and parsed["jd_text"]:
-                    profile = _oferta_mod._load_profile()
-                    brief, _, _ = _oferta_mod.generate_brief_with_claude(parsed, profile)
-                    if brief is not None:
-                        analysis = {**brief, "grade": parsed["grade"], "overall": parsed["overall_score"]}
-                        brief_source = "CLAUDE"
+            if with_oferta:
+                try:
+                    parsed = _oferta_mod.parse_eval_deep(eval_path)
+                    jd = {"title": parsed["title"], "company": parsed["company"],
+                          "location": "See eval", "salary": "See eval"}
+                    if parsed["jd_source"] == "REAL" and parsed["jd_text"]:
+                        profile = _oferta_mod._load_profile()
+                        brief, _, _ = _oferta_mod.generate_brief_with_claude(parsed, profile)
+                        if brief is not None:
+                            analysis = {**brief, "grade": parsed["grade"], "overall": parsed["overall_score"]}
+                            brief_source = "CLAUDE"
+                        else:
+                            analysis = _oferta_mod.build_deep_analysis(jd, url, parsed)
+                            brief_source = "TEMPLATE_FALLBACK"
                     else:
                         analysis = _oferta_mod.build_deep_analysis(jd, url, parsed)
                         brief_source = "TEMPLATE_FALLBACK"
-                else:
-                    analysis = _oferta_mod.build_deep_analysis(jd, url, parsed)
-                    brief_source = "TEMPLATE_FALLBACK"
-                _oferta_mod.write_deep_report(analysis, jd, url, brief_source=brief_source)
-                print(f"  → Oferta: {company}")
-            except Exception as e:
-                print(f"  → Oferta error for {company}: {e}")
+                    _oferta_mod.write_deep_report(analysis, jd, url, brief_source=brief_source)
+                    print(f"  → Oferta: {company}")
+                except Exception as e:
+                    print(f"  → Oferta error for {company}: {e}")
 
-            if not no_outreach:
+            if with_outreach:
                 try:
                     eval_data = _contacto_mod.get_eval_rich(url)
                     oferta_hooks = _contacto_mod._find_oferta_hooks(company)
@@ -226,7 +253,7 @@ def main() -> None:
         if pdf_path:
             counts["pdfs"] += 1
 
-        status = "cv_ready" if grade in APPLY_GRADES else "skipped"
+        status = "cv_ready" if pdf_path else ("evaluated" if grade in APPLY_GRADES else "skipped")
         append_tracker_row({
             "date": today,
             "company": company,
@@ -254,7 +281,10 @@ def main() -> None:
                     company = result.get("company", "?")
                     if result.get("skipped"):
                         counts["eval_skipped"] += 1
-                        print(f"  [{done}/{total}] {company} — skipped")
+                        if result.get("skip_reason") == "closed_application":
+                            print(f"  [{done}/{total}] {company} — closed, skipped before evaluation")
+                        else:
+                            print(f"  [{done}/{total}] {company} — skipped")
                     else:
                         grade = result.get("grade", "?")
                         score = result.get("overall_score", "?")
@@ -271,7 +301,10 @@ def main() -> None:
             company = result.get("company", "?")
             if result["skipped"]:
                 counts["eval_skipped"] += 1
-                print(f"  [{i}/{total}] {company} — already evaluated, skipping")
+                if result.get("skip_reason") == "closed_application":
+                    print(f"  [{i}/{total}] {company} — closed, skipped before evaluation")
+                else:
+                    print(f"  [{i}/{total}] {company} — already evaluated, skipping")
             else:
                 grade = result.get("grade", "?")
                 score = result.get("overall_score", "?")

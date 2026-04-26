@@ -18,6 +18,7 @@ Batch mode:
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -143,7 +144,19 @@ def process_single_url(args, url: str, tracked_urls: set[str]) -> tuple[dict, in
     result["jd_source"] = jd_src
 
     if result["skipped"]:
-        print(f"[AUTO] eval url={url[:70]} already_evaluated=true")
+        if result.get("skip_reason") == "closed_application":
+            if url not in tracked_urls:
+                append_tracker_row({
+                    "date": today, "company": result.get("company", "?"),
+                    "role": result.get("title", ""), "url": url,
+                    "grade": "", "score": "",
+                    "status": "skipped", "pdf_path": "",
+                    "notes": result.get("skip_detail", "closed_application"),
+                })
+                tracked_urls.add(url)
+            print(f"[AUTO] eval url={url[:70]} closed_application=true")
+        else:
+            print(f"[AUTO] eval url={url[:70]} already_evaluated=true")
         result["pdf_path"] = ""
         return result, 0
 
@@ -267,6 +280,14 @@ def phase_oferta_contacto(args, results: list[dict]) -> tuple[int, int, float]:
     print("[AUTO] phase=oferta_contacto")
     briefs = outreach = 0
     total_cost = 0.0
+    requested_scripts: list[tuple[str, str]] = []
+    if args.with_oferta:
+        requested_scripts.append(("oferta.py", "oferta"))
+    if args.with_outreach:
+        requested_scripts.append(("contacto.py", "contacto"))
+    if not requested_scripts:
+        print("[AUTO] skipped (no optional artifact flags enabled)")
+        return 0, 0, 0.0
 
     for r in results:
         if r.get("skipped") or r.get("_dry"):
@@ -281,10 +302,11 @@ def phase_oferta_contacto(args, results: list[dict]) -> tuple[int, int, float]:
             continue
 
         if args.dry_run:
-            print(f"[DRY] would run oferta + contacto for {url[:60]}")
+            labels = " + ".join(label for _, label in requested_scripts)
+            print(f"[DRY] would run {labels} for {url[:60]}")
             continue
 
-        for script, label in [("oferta.py", "oferta"), ("contacto.py", "contacto")]:
+        for script, label in requested_scripts:
             proc = subprocess.run(
                 [sys.executable, str(SCRIPTS_DIR / script), url],
                 capture_output=True, text=True,
@@ -400,7 +422,16 @@ def main() -> None:
                         help="Path to batch state JSON (default: <batch-file>.state.json)")
     parser.add_argument("--max-retries", type=int, default=2, metavar="N",
                         help="Retry failed batch items up to N times (default: 2)")
+    parser.add_argument("--model", default=None,
+                        help="Model override for the full run, e.g. gpt-5.4 or claude-haiku-4-5-20251001")
+    parser.add_argument("--with-oferta", action="store_true",
+                        help="Generate deep offer analysis for qualifying roles")
+    parser.add_argument("--with-outreach", action="store_true",
+                        help="Generate outreach drafts for qualifying roles")
     args = parser.parse_args()
+
+    if args.model:
+        os.environ["MODEL_OVERRIDE"] = args.model
 
     if args.dry_run:
         print("[AUTO] DRY RUN — no files will be written\n")

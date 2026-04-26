@@ -8,10 +8,11 @@ Uses the configured LLM provider, defaulting to Anthropic claude-haiku-4-5-20251
 """
 
 import argparse
-import sys
+import csv
+import hashlib
 import os
 import re
-import csv
+import sys
 import threading
 from datetime import date
 from pathlib import Path
@@ -26,9 +27,21 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 from dotenv import load_dotenv
 load_dotenv(REPO_ROOT / ".env")
 try:
-    from llm_provider import describe_task_model, format_usage, run_job_evaluation
+    from llm_provider import (
+        _get_anthropic_client,
+        describe_task_model,
+        format_usage,
+        get_model,
+        run_job_evaluation,
+    )
 except ImportError:  # pragma: no cover - module execution fallback
-    from scripts.llm_provider import describe_task_model, format_usage, run_job_evaluation
+    from scripts.llm_provider import (
+        _get_anthropic_client,
+        describe_task_model,
+        format_usage,
+        get_model,
+        run_job_evaluation,
+    )
 
 # ── Paths ────────────────────────────────────────────────────────────────────
 
@@ -43,6 +56,12 @@ SOURCE_HISTORY = REPO_ROOT / "source-history.tsv"
 
 _PROFILE_CACHE: dict | None = None
 _CALIBRATION_CACHE: list[dict] | None = None
+_LINKEDIN_METADATA_CACHE: dict[str, dict] | None = None
+
+# Compatibility shim for oferta.py / contacto.py, which still use the Anthropic
+# messages API directly for secondary generation tasks.
+MODEL = get_model("eval", provider="anthropic")
+_client = _get_anthropic_client()
 
 # ── Sponsorship detection patterns ───────────────────────────────────────────
 
@@ -111,6 +130,87 @@ def extract_company_from_url(url: str) -> str:
 
     parts = hostname.replace("www.", "").split(".")
     return parts[0].replace("-", " ").title() if parts else "Unknown"
+
+
+def is_linkedin_job_url(url: str) -> bool:
+    hostname = (urlparse(url).hostname or "").lower()
+    return "linkedin.com" in hostname
+
+
+def extract_job_token(url: str) -> str:
+    clean_url = url.strip()
+    if not clean_url:
+        return ""
+
+    matches = re.findall(r"(\d{6,})", clean_url)
+    if matches:
+        return matches[-1]
+
+    parsed = urlparse(clean_url)
+    path_parts = [part for part in parsed.path.split("/") if part]
+    if path_parts:
+        tail = slugify(path_parts[-1])
+        if tail:
+            return tail[:40]
+
+    return hashlib.sha1(clean_url.encode("utf-8")).hexdigest()[:10]
+
+
+def _load_linkedin_metadata_index() -> dict[str, dict]:
+    global _LINKEDIN_METADATA_CACHE
+    if _LINKEDIN_METADATA_CACHE is not None:
+        return _LINKEDIN_METADATA_CACHE
+
+    index: dict[str, dict] = {}
+
+    def _store(url: str, title: str, company: str, location: str) -> None:
+        clean_url = str(url or "").strip()
+        if not clean_url:
+            return
+        token = extract_job_token(clean_url)
+        if not token:
+            return
+        index[token] = {
+            "url": clean_url,
+            "title": str(title or "").strip(),
+            "company": str(company or "").strip(),
+            "location": str(location or "").strip(),
+        }
+
+    if SOURCE_HISTORY.exists():
+        with SOURCE_HISTORY.open(newline="", encoding="utf-8") as handle:
+            for row in csv.DictReader(handle, delimiter="\t"):
+                _store(
+                    row.get("target_url", ""),
+                    row.get("job_title", ""),
+                    row.get("company", ""),
+                    row.get("location", ""),
+                )
+
+    for csv_dir in (REPO_ROOT / "csv-inbox", REPO_ROOT / "csv-inbox" / "processed"):
+        if not csv_dir.exists():
+            continue
+        for csv_path in sorted(csv_dir.glob("*.csv")):
+            try:
+                with csv_path.open(newline="", encoding="utf-8-sig") as handle:
+                    for row in csv.DictReader(handle):
+                        _store(
+                            row.get("Detail URL", ""),
+                            row.get("Title", ""),
+                            row.get("Company Name", ""),
+                            row.get("Location", ""),
+                        )
+            except Exception:
+                continue
+
+    _LINKEDIN_METADATA_CACHE = index
+    return index
+
+
+def load_linkedin_metadata(url: str) -> dict | None:
+    if not is_linkedin_job_url(url):
+        return None
+    return _load_linkedin_metadata_index().get(extract_job_token(url))
 
 
 def read_scan_history() -> list[dict]:
@@ -182,9 +282,11 @@ def _load_linkedin_sponsorship(url: str) -> str | None:
     """Return sponsorship_signal ('yes'/'no'/'unknown') from source-history.tsv, or None."""
     if not SOURCE_HISTORY.exists():
         return None
+    target_token = extract_job_token(url)
     with SOURCE_HISTORY.open(newline="", encoding="utf-8") as f:
         for row in csv.DictReader(f, delimiter="\t"):
-            if row.get("target_url", "").strip() == url.strip():
+            row_url = row.get("target_url", "").strip()
+            if row_url == url.strip() or extract_job_token(row_url) == target_token:
                 sig = row.get("sponsorship_signal", "").strip().lower()
                 return sig if sig else None
     return None
@@ -503,6 +605,11 @@ def _web_comp_lookup(title: str) -> str:
 
 JD_TIMEOUT_MS = 12_000
 JD_MAX_CHARS = 3000
+LINKEDIN_CLOSED_PHRASES = (
+    "no longer accepting applications",
+    "this job is no longer available",
+    "position has been filled",
+)
 
 # Ordered from most-specific to generic
 SELECTOR_CASCADE = [
@@ -534,11 +641,29 @@ def _scrape_jd_text(page) -> str | None:
         return None
 
 
+def _linkedin_application_status(page) -> dict | None:
+    try:
+        body = page.inner_text("body").lower()
+    except Exception:
+        return None
+
+    for phrase in LINKEDIN_CLOSED_PHRASES:
+        if phrase in body:
+            return {
+                "status": "closed",
+                "reason": f"LinkedIn page says '{phrase}'",
+            }
+    return None
+
+
 def extract_jd(url: str) -> dict:
     """Extract real JD via Playwright; falls back to mock template on any error."""
     from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
 
-    company = extract_company_from_url(url)
+    metadata = load_linkedin_metadata(url) or {}
+    company = metadata.get("company") or extract_company_from_url(url)
+    default_title = metadata.get("title") or "Data Scientist"
+    default_location = metadata.get("location") or "See JD"
 
     try:
         with sync_playwright() as p:
@@ -550,12 +675,26 @@ def extract_jd(url: str) -> dict:
             except PWTimeout:
                 pass  # proceed with whatever loaded
 
-            title = "Data Scientist"
+            title = default_title
             h1 = page.query_selector("h1")
             if h1:
                 t = h1.inner_text().strip()
                 if t:
                     title = t
+
+            if is_linkedin_job_url(url):
+                application_status = _linkedin_application_status(page)
+                if application_status:
+                    browser.close()
+                    return {
+                        "title": title,
+                        "company": company,
+                        "location": default_location,
+                        "salary": "",
+                        "description": "[JD_SOURCE: REAL]\n",
+                        "application_status": application_status["status"],
+                        "application_status_reason": application_status["reason"],
+                    }
 
             jd_text = _scrape_jd_text(page)
             browser.close()
@@ -566,15 +705,22 @@ def extract_jd(url: str) -> dict:
             return {
                 "title": title,
                 "company": company,
-                "location": "See JD",
+                "location": default_location,
                 "salary": "See JD",
                 "description": "[JD_SOURCE: REAL]\n" + jd_text,
             }
 
     except PWTimeout:
+        if is_linkedin_job_url(url):
+            raise RuntimeError(f"LinkedIn JD extraction timed out for {url}")
         print(f"[JD] WARN — timeout scraping {url[:70]}, using mock")
     except Exception as exc:
+        if is_linkedin_job_url(url):
+            raise RuntimeError(f"LinkedIn JD extraction failed for {url}: {exc}") from exc
         print(f"[JD] WARN — {exc} | {url[:70]}, using mock")
+
+    if is_linkedin_job_url(url):
+        raise RuntimeError(f"LinkedIn JD extraction returned no content for {url}")
 
     # Mock fallback
     print(f"[JD] MOCK — template used for {url[:70]}")
@@ -809,7 +955,8 @@ def write_report(
 ) -> Path:
     today = date.today().isoformat()
     company_slug = slugify(result["company"])
-    filename = f"{company_slug}_{today}.md"
+    job_token = extract_job_token(url)
+    filename = f"{company_slug}_{job_token}_{today}.md"
 
     EVALS_DIR.mkdir(parents=True, exist_ok=True)
     output_path = EVALS_DIR / filename
@@ -968,6 +1115,19 @@ def evaluate_url(url: str, force: bool = False) -> dict:
 
     # Step 2 — JD extraction (real Playwright; mock fallback on failure)
     jd = extract_jd(url)
+
+    if jd.get("application_status") == "closed":
+        reason = jd.get("application_status_reason", "job is no longer accepting applications")
+        print(f"[APPLICATION] GATE FAIL — {reason}")
+        return {
+            "skipped": True,
+            "skip_reason": "closed_application",
+            "skip_detail": reason,
+            "url": url,
+            "title": jd.get("title", "Unknown"),
+            "company": jd.get("company", "Unknown"),
+            "location": jd.get("location", ""),
+        }
 
     _ZERO_SCORES = {d: 0.0 for d in [
         "role_match", "skills_alignment", "seniority", "compensation",
@@ -1142,9 +1302,13 @@ def main() -> None:
     result = evaluate_url(args.job_url, force=args.force)
 
     if result["skipped"]:
-        print("Already evaluated. Skipping.")
-        print(f"  Seen:   {result.get('date_seen', '?')}")
-        print(f"  Report: {result.get('eval_path', '?')}")
+        if result.get("skip_reason") == "closed_application":
+            print("Closed role. Skipping before evaluation.")
+            print(f"  Reason: {result.get('skip_detail', '?')}")
+        else:
+            print("Already evaluated. Skipping.")
+            print(f"  Seen:   {result.get('date_seen', '?')}")
+            print(f"  Report: {result.get('eval_path', '?')}")
         sys.exit(0)
 
     recommended_str = "YES ✓" if result["recommended"] else "NO ✗"

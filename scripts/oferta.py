@@ -8,24 +8,25 @@ Falls back to template prose for old/mock evals.
 """
 
 import json
+import os
 import re
 import sys
 from datetime import date
 from pathlib import Path
 
 try:
-    from identity import record_artifact_identity
+    from identity import build_job_artifact_suffix, record_artifact_identity
 except ImportError:  # pragma: no cover - module execution fallback
-    from scripts.identity import record_artifact_identity
+    from scripts.identity import build_job_artifact_suffix, record_artifact_identity
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from evaluate import (
     extract_company_from_url, mock_extract_jd,
     read_scan_history, url_already_evaluated,
     parse_eval_file, evaluate_url,
-    _client, MODEL,
     PROFILE_PATH, EVALS_DIR, REPO_ROOT,
 )
+from llm_provider import format_usage, run_json_prompt
 
 ERRORS_LOG = EVALS_DIR / "errors.log"
 
@@ -246,33 +247,28 @@ def generate_brief_with_claude(
         jd_text=parsed["jd_text"][:1200],
     )
 
-    response = _client.messages.create(
-        model=MODEL,
-        max_tokens=800,
+    brief, usage, raw = run_json_prompt(
+        task="brief",
         system="You are a job-fit analyst. Output valid JSON only. No explanation.",
-        messages=[{"role": "user", "content": prompt}],
+        prompt=prompt,
+        max_output_tokens=800,
+        provider=None,
     )
-
-    usage = response.usage
-    raw = response.content[0].text.strip()
-    if raw.startswith("```"):
-        raw = re.sub(r"^```(?:json)?\s*", "", raw)
-        raw = re.sub(r"\s*```$", "", raw).strip()
-
+    print(format_usage(usage, label="brief"))
     try:
-        brief = json.loads(raw)
-    except json.JSONDecodeError as exc:
+        brief = dict(brief)
+    except Exception as exc:
         EVALS_DIR.mkdir(parents=True, exist_ok=True)
         with ERRORS_LOG.open("a", encoding="utf-8") as f:
             f.write(f"\n--- {date.today().isoformat()} | {parsed['company']} | oferta ---\n")
-            f.write(f"JSONDecodeError: {exc}\n")
+            f.write(f"BriefParseError: {exc}\n")
             f.write(raw + "\n")
-        print(f"[ERROR] Malformed JSON from Claude (brief). Raw saved to {ERRORS_LOG.name}")
+        print(f"[ERROR] Malformed JSON from model (brief). Raw saved to {ERRORS_LOG.name}")
         return None, usage.input_tokens, usage.output_tokens
 
     missing = _BRIEF_KEYS - brief.keys()
     if missing:
-        print(f"[WARN] Claude brief missing keys: {missing}. Falling back to template.")
+        print(f"[WARN] Model brief missing keys: {missing}. Falling back to template.")
         EVALS_DIR.mkdir(parents=True, exist_ok=True)
         with ERRORS_LOG.open("a", encoding="utf-8") as f:
             f.write(f"\n--- {date.today().isoformat()} | {parsed['company']} | oferta missing keys ---\n")
@@ -331,7 +327,8 @@ def write_deep_report(
     company_slug = re.sub(r"[\s_]+", "-", jd["company"].lower().strip())
     company_slug = re.sub(r"[^\w-]", "", company_slug)
     company_slug = re.sub(r"-{2,}", "-", company_slug)
-    filename = f"deep_{company_slug}_{today}.md"
+    artifact_suffix = build_job_artifact_suffix(url=url, company=jd["company"], title=jd["title"])
+    filename = f"deep_{company_slug}_{artifact_suffix}_{today}.md"
 
     EVALS_DIR.mkdir(parents=True, exist_ok=True)
     output_path = EVALS_DIR / filename

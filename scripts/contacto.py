@@ -15,9 +15,9 @@ from datetime import date
 from pathlib import Path
 
 try:
-    from identity import record_artifact_identity
+    from identity import build_job_artifact_suffix, record_artifact_identity
 except ImportError:  # pragma: no cover - module execution fallback
-    from scripts.identity import record_artifact_identity
+    from scripts.identity import build_job_artifact_suffix, record_artifact_identity
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from evaluate import (
@@ -25,9 +25,9 @@ from evaluate import (
     read_scan_history, url_already_evaluated,
     parse_eval_file, evaluate_url,
     build_lean_cv,
-    _client, MODEL,
     EVALS_DIR,
 )
+from llm_provider import format_usage, run_json_prompt
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 APPLICATIONS_DIR = REPO_ROOT / "applications"
@@ -183,32 +183,27 @@ def generate_outreach_with_claude(
         hooks_block=hooks_block,
     )
 
-    response = _client.messages.create(
-        model=MODEL,
-        max_tokens=600,
+    messages, usage, raw = run_json_prompt(
+        task="outreach",
         system="You are a LinkedIn outreach specialist. Output valid JSON only. No explanation.",
-        messages=[{"role": "user", "content": prompt}],
+        prompt=prompt,
+        max_output_tokens=600,
+        provider=None,
     )
-
-    usage = response.usage
-    raw = response.content[0].text.strip()
-    if raw.startswith("```"):
-        raw = re.sub(r"^```(?:json)?\s*", "", raw)
-        raw = re.sub(r"\s*```$", "", raw).strip()
-
+    print(format_usage(usage, label="outreach"))
     try:
-        messages = json.loads(raw)
-    except json.JSONDecodeError as exc:
+        messages = dict(messages)
+    except Exception as exc:
         APPLICATIONS_DIR.mkdir(parents=True, exist_ok=True)
         with OUTREACH_ERRORS_LOG.open("a", encoding="utf-8") as f:
             f.write(f"\n--- {date.today().isoformat()} | {eval_data['company']} ---\n")
-            f.write(f"JSONDecodeError: {exc}\n{raw}\n")
+            f.write(f"OutreachParseError: {exc}\n{raw}\n")
         print(f"[ERROR] Malformed JSON from Claude. Raw saved to {OUTREACH_ERRORS_LOG.name}")
         return None, usage.input_tokens, usage.output_tokens
 
     missing = {"short", "standard", "value_first"} - messages.keys()
     if missing:
-        print(f"[WARN] Claude response missing keys: {missing}. Falling back to template.")
+        print(f"[WARN] Model response missing keys: {missing}. Falling back to template.")
         return None, usage.input_tokens, usage.output_tokens
 
     # Enforce short variant char limit
@@ -281,7 +276,8 @@ def write_outreach_report(
     company_slug = re.sub(r"[\s_]+", "-", company.lower().strip())
     company_slug = re.sub(r"[^\w-]", "", company_slug)
     company_slug = re.sub(r"-{2,}", "-", company_slug)
-    filename = f"outreach_{company_slug}_{today}.md"
+    artifact_suffix = build_job_artifact_suffix(url=url, company=company, title=title)
+    filename = f"outreach_{company_slug}_{artifact_suffix}_{today}.md"
 
     APPLICATIONS_DIR.mkdir(parents=True, exist_ok=True)
     output_path = APPLICATIONS_DIR / filename

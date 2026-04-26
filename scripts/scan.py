@@ -3,14 +3,15 @@ ds-radar scanner
 Usage: python scan.py
 
 Discovers job URLs from two sources:
-  1. ATS boards defined in profile/target-companies.yaml
-  2. LinkedIn CSV files dropped into csv-inbox/  (Detail URL column)
+  1. LinkedIn CSV files dropped into csv-inbox/  (Detail URL column)
+  2. ATS boards defined in profile/target-companies.yaml when explicitly enabled
 
 Deduplicates against scan-history.tsv + tracker.tsv, liveness-checks ATS URLs,
-and writes new URLs to scan-queue.txt.
+and refreshes scan-queue.txt while preserving still-pending URLs.
 Processed CSVs are moved to csv-inbox/processed/ so they are never re-imported.
 """
 
+import argparse
 import csv
 import re
 import shutil
@@ -31,11 +32,23 @@ TARGET_COMPANIES = REPO_ROOT / "profile" / "target-companies.yaml"
 SCAN_HISTORY = REPO_ROOT / "scan-history.tsv"
 TRACKER = REPO_ROOT / "tracker.tsv"
 SCAN_QUEUE = REPO_ROOT / "scan-queue.txt"
+SOURCE_HISTORY = REPO_ROOT / "source-history.tsv"
 ERRORS_LOG = REPO_ROOT / "evals" / "errors.log"
 CSV_INBOX = REPO_ROOT / "csv-inbox"
 CSV_PROCESSED = CSV_INBOX / "processed"
 
 GREENHOUSE_TIMEOUT_MS = 15_000
+LINKEDIN_MAX_AGE_DAYS = 14
+LINKEDIN_CLOSED_PHRASES = (
+    "no longer accepting applications",
+    "position has been filled",
+)
+SOURCE_HISTORY_HEADER = [
+    "source", "discovered_at", "search_title", "job_title",
+    "company", "location", "posted", "relevance_score",
+    "licensed_sponsor", "sponsorship_signal", "sponsorship_evidence",
+    "source_url", "target_url",
+]
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -67,6 +80,66 @@ def load_seen_urls() -> set[str]:
     return seen
 
 
+def load_queued_urls() -> list[str]:
+    """Return current queue contents, deduplicated and order-preserving."""
+    if not SCAN_QUEUE.exists():
+        return []
+
+    queued_urls: list[str] = []
+    seen: set[str] = set()
+    for raw_url in SCAN_QUEUE.read_text(encoding="utf-8").splitlines():
+        url = raw_url.strip()
+        if not url or url in seen:
+            continue
+        seen.add(url)
+        queued_urls.append(url)
+    return queued_urls
+
+
+def load_source_history_urls() -> set[str]:
+    if not SOURCE_HISTORY.exists():
+        return set()
+    with SOURCE_HISTORY.open(newline="", encoding="utf-8") as handle:
+        reader = csv.DictReader(handle, delimiter="\t")
+        return {
+            row["target_url"].strip()
+            for row in reader
+            if row.get("target_url", "").strip()
+        }
+
+
+def append_source_history_rows(rows: list[dict]) -> None:
+    if not rows:
+        return
+    write_header = not SOURCE_HISTORY.exists() or SOURCE_HISTORY.stat().st_size == 0
+    with SOURCE_HISTORY.open("a", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=SOURCE_HISTORY_HEADER, delimiter="\t")
+        if write_header:
+            writer.writeheader()
+        writer.writerows(rows)
+
+
+def parse_linkedin_created_at(value: str) -> datetime | None:
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    try:
+        return datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def is_closed_linkedin_row(row: dict) -> bool:
+    haystacks = [
+        row.get("Title", ""),
+        row.get("Description", ""),
+        row.get("Primary Description", ""),
+        row.get("Insight", ""),
+    ]
+    combined = "\n".join(str(part or "") for part in haystacks).lower()
+    return any(phrase in combined for phrase in LINKEDIN_CLOSED_PHRASES)
+
+
 # ── LinkedIn CSV inbox ────────────────────────────────────────────────────────
 
 def ingest_csv_inbox(seen_urls: set[str]) -> list[str]:
@@ -79,6 +152,7 @@ def ingest_csv_inbox(seen_urls: set[str]) -> list[str]:
         return []
 
     new_urls: list[str] = []
+    source_history_urls = load_source_history_urls()
     for csv_path in csv_files:
         try:
             with csv_path.open(newline="", encoding="utf-8-sig") as f:
@@ -86,13 +160,56 @@ def ingest_csv_inbox(seen_urls: set[str]) -> list[str]:
                 if "Detail URL" not in (reader.fieldnames or []):
                     print(f"  [CSV] {csv_path.name}: no 'Detail URL' column — skipping")
                     continue
-                urls = [row["Detail URL"].strip() for row in reader if row.get("Detail URL", "").strip()]
-            fresh = [u for u in urls if u not in seen_urls]
+                rows = list(reader)
+            urls = [row["Detail URL"].strip() for row in rows if row.get("Detail URL", "").strip()]
+            cutoff = datetime.now().date().toordinal() - LINKEDIN_MAX_AGE_DAYS
+            eligible_urls: list[str] = []
+            skipped_old = 0
+            skipped_closed = 0
+            for row in rows:
+                url = row.get("Detail URL", "").strip()
+                if not url:
+                    continue
+                if is_closed_linkedin_row(row):
+                    skipped_closed += 1
+                    continue
+                created_at = parse_linkedin_created_at(row.get("Created At", ""))
+                if created_at and created_at.date().toordinal() < cutoff:
+                    skipped_old += 1
+                    continue
+                eligible_urls.append(url)
+            fresh = [u for u in eligible_urls if u not in seen_urls]
             new_urls.extend(fresh)
             seen_urls.update(fresh)  # prevent cross-file duplication
+            discovered_at = datetime.now().date().isoformat()
+            source_rows: list[dict] = []
+            for row in rows:
+                url = row.get("Detail URL", "").strip()
+                if not url or url in source_history_urls:
+                    continue
+                source_rows.append({
+                    "source": "linkedin_csv_inbox",
+                    "discovered_at": discovered_at,
+                    "search_title": "linkedin_csv_inbox",
+                    "job_title": row.get("Title", "").strip(),
+                    "company": row.get("Company Name", "").strip(),
+                    "location": row.get("Location", "").strip(),
+                    "posted": row.get("Created At", "").strip(),
+                    "relevance_score": "",
+                    "licensed_sponsor": "",
+                    "sponsorship_signal": "",
+                    "sponsorship_evidence": "",
+                    "source_url": url,
+                    "target_url": url,
+                })
+                source_history_urls.add(url)
+            append_source_history_rows(source_rows)
             dest = CSV_PROCESSED / csv_path.name
             shutil.move(str(csv_path), str(dest))
-            print(f"  [CSV] {csv_path.name}: {len(urls)} rows, {len(fresh)} new → archived")
+            print(
+                f"  [CSV] {csv_path.name}: {len(urls)} rows, "
+                f"{skipped_old} old, {skipped_closed} closed, {len(fresh)} new → archived"
+            )
         except Exception as exc:
             print(f"  [CSV] {csv_path.name}: error reading — {exc}")
 
@@ -242,27 +359,40 @@ def discover_jobs(company: dict) -> list[str]:
 # ── Main ─────────────────────────────────────────────────────────────────────
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description="Scan CSV inbox and optionally ATS boards")
+    parser.add_argument(
+        "--with-ats",
+        action="store_true",
+        help="Also discover roles from ATS boards in profile/target-companies.yaml",
+    )
+    args = parser.parse_args()
+
     seen_urls = load_seen_urls()
+    queued_urls = [url for url in load_queued_urls() if url not in seen_urls]
+    dedupe_urls = seen_urls | set(queued_urls)
 
     # ── Source 1: LinkedIn CSV inbox ─────────────────────────────────────────
     print()
     print("[SCAN] CSV inbox")
-    csv_urls = ingest_csv_inbox(seen_urls)
+    csv_urls = ingest_csv_inbox(dedupe_urls)
     print(f"       {len(csv_urls)} new LinkedIn URLs from CSVs")
 
-    # ── Source 2: ATS boards ──────────────────────────────────────────────────
-    print()
-    print("[SCAN] ATS boards")
-    companies = load_companies()
     ats_urls: list[str] = []
-    for company in companies:
-        print(f"  {company['name']}...", end=" ", flush=True)
-        discovered = discover_jobs(company)
-        new = [u for u in discovered if u not in seen_urls]
-        seen_urls.update(new)
-        ats_urls.extend(new)
-        print(f"→ {len(discovered)} found, {len(new)} new, {len(discovered)-len(new)} seen")
-    print(f"       {len(ats_urls)} new ATS URLs")
+    if args.with_ats:
+        print()
+        print("[SCAN] ATS boards")
+        companies = load_companies()
+        for company in companies:
+            print(f"  {company['name']}...", end=" ", flush=True)
+            discovered = discover_jobs(company)
+            new = [u for u in discovered if u not in dedupe_urls]
+            dedupe_urls.update(new)
+            ats_urls.extend(new)
+            print(f"→ {len(discovered)} found, {len(new)} new, {len(discovered)-len(new)} seen")
+        print(f"       {len(ats_urls)} new ATS URLs")
+    else:
+        print()
+        print("[SCAN] ATS boards skipped (use --with-ats to enable)")
 
     # ── Liveness check (ATS only; LinkedIn URLs are live by definition) ───────
     all_candidate_urls = csv_urls + ats_urls
@@ -281,9 +411,11 @@ def main() -> None:
 
     print(f"[LIVENESS] {len(ats_urls) - (len(live_urls) - len(csv_urls))}/{len(ats_urls)} ATS URLs failed liveness")
 
-    # ── Write scan-queue.txt (overwrite each run) ─────────────────────────────
+    queue_urls = queued_urls + live_urls
+
+    # ── Write scan-queue.txt (preserve pending + append fresh) ────────────────
     SCAN_QUEUE.write_text(
-        "\n".join(live_urls) + ("\n" if live_urls else ""),
+        "\n".join(queue_urls) + ("\n" if queue_urls else ""),
         encoding="utf-8",
     )
 
@@ -291,9 +423,11 @@ def main() -> None:
     print(f"\n{sep}")
     print(f"  LinkedIn CSV:    {len(csv_urls)}")
     print(f"  ATS boards:      {len(ats_urls)}")
-    print(f"  Queue total:     {len(live_urls)}")
+    print(f"  Queue carried:   {len(queued_urls)}")
+    print(f"  Queue new:       {len(live_urls)}")
+    print(f"  Queue total:     {len(queue_urls)}")
     print(sep)
-    if live_urls:
+    if queue_urls:
         print("  Next: python scripts/pipeline.py --parallel 3")
     print(f"{sep}\n")
 
